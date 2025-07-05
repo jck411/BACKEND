@@ -20,6 +20,8 @@ from fastapi.responses import JSONResponse
 from common.config import Config
 from common.logging import TimedLogger
 from common.models import WebSocketMessage, WebSocketResponse, Chunk, ChunkType
+from router.message_types import RequestType, RouterRequest
+from router.request_router import RequestRouter
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,7 @@ class WebSocketGateway:
         self.config = config
         self.app = FastAPI(title="Backend Gateway", version="0.1.0")
         self.connection_manager = ConnectionManager()
+        self.router = RequestRouter(config)
 
         # Setup routes
         self._setup_routes()
@@ -136,7 +139,7 @@ class WebSocketGateway:
                 }
             )
 
-        @self.app.websocket("/ws")
+        @self.app.websocket("/ws/chat")
         async def websocket_endpoint(websocket: WebSocket):
             """Main WebSocket endpoint."""
             await self._handle_websocket_connection(websocket)
@@ -244,9 +247,8 @@ class WebSocketGateway:
             ack_response = WebSocketResponse(request_id=message.request_id, status="processing")
             await self.connection_manager.send_to_connection(connection_id, ack_response)
 
-            # TODO: Route message to router component
-            # For now, send a mock response
-            await self._send_mock_response(message, connection_id)
+            # Route message to router component
+            await self._route_to_router(message, connection_id, user_id)
 
         except Exception as e:
             logger.error(
@@ -264,28 +266,53 @@ class WebSocketGateway:
             )
             await self.connection_manager.send_to_connection(connection_id, error_response)
 
-    async def _send_mock_response(self, message: WebSocketMessage, connection_id: str) -> None:
-        """Send a mock response for testing purposes."""
-        # Simulate processing time
-        await asyncio.sleep(0.1)
+    async def _route_to_router(
+        self, message: WebSocketMessage, connection_id: str, user_id: Optional[str]
+    ) -> None:
+        """Route message to router and stream responses back to client."""
+        try:
+            # Convert WebSocket message to router request
+            request_type = self._map_action_to_request_type(message.action)
 
-        # Send a few chunks to simulate streaming
-        for i in range(3):
-            chunk_response = WebSocketResponse(
+            router_request = RouterRequest(
                 request_id=message.request_id,
-                status="chunk",
-                chunk=Chunk(
-                    type=ChunkType.TEXT,
-                    data=f"Mock response chunk {i + 1} for action '{message.action}'",
-                    metadata={"chunk_number": i + 1},
-                ),
+                request_type=request_type,
+                payload=message.payload,
+                user_id=user_id,
+                connection_id=connection_id,
             )
-            await self.connection_manager.send_to_connection(connection_id, chunk_response)
-            await asyncio.sleep(0.1)
 
-        # Send completion
-        complete_response = WebSocketResponse(request_id=message.request_id, status="complete")
-        await self.connection_manager.send_to_connection(connection_id, complete_response)
+            # Process request and stream responses
+            async for response in self.router.process_request(router_request):
+                await self.connection_manager.send_to_connection(connection_id, response)
+
+        except Exception as e:
+            logger.error(
+                "Router processing failed",
+                extra={
+                    "event": "router_processing_failed",
+                    "connection_id": connection_id,
+                    "error": str(e),
+                },
+            )
+            # Send error response
+            error_response = WebSocketResponse(
+                request_id=message.request_id,
+                status="error",
+                error=f"Router processing failed: {str(e)}",
+            )
+            await self.connection_manager.send_to_connection(connection_id, error_response)
+
+    def _map_action_to_request_type(self, action: str) -> RequestType:
+        """Map WebSocket action to router request type."""
+        action_mapping = {
+            "chat": RequestType.CHAT,  # Includes LLM function calling for device control
+            "generate_image": RequestType.IMAGE_GENERATION,
+            "audio_stream": RequestType.AUDIO_STREAM,  # TTS and audio generation
+            "frontend_command": RequestType.FRONTEND_COMMAND,  # UI updates and notifications
+        }
+
+        return action_mapping.get(action, RequestType.CHAT)  # Default to chat
 
 
 def create_gateway_app(config: Config) -> FastAPI:

@@ -82,3 +82,92 @@ Router ↔ MCP: Fetches and updates profiles via RESTful HTTP/JSON (or gRPC for 
 MCP Updates → Router: Uses a lightweight Redis Pub/Sub channel so routers hot-reload parameter changes without restarts.
 
 Adapters → Devices: For home-automation commands, uses MQTT over TCP (via Zigbee2MQTT) at defined QoS levels to ensure reliable delivery.
+
+6. Current Working Implementation (Added 2025-07-05)
+
+The system now has a working bare-bones implementation with Router integration:
+
+**Architecture Clarification:**
+
+*Device Control Flow:*
+1. User: "Turn on the lights" → Frontend → WebSocket → Backend
+2. Backend LLM processes request and calls device functions directly
+3. Backend executes device commands via Zigbee adapter
+4. Backend sends status update to frontend: "Lights turned on"
+5. Frontend displays confirmation to user
+
+*Audio Streaming Flow:*
+1. Backend generates TTS audio data
+2. Backend streams audio chunks to frontend via WebSocket
+3. Frontend plays audio in real-time
+4. Supports various audio formats and voice configurations
+
+*Frontend Command Flow:*
+1. Backend determines UI updates needed (notifications, status displays)
+2. Backend sends frontend_command actions to update UI
+3. Frontend handles display logic and user experience
+
+**Message Flow:**
+1. Client connects to WebSocket endpoint: `ws://127.0.0.1:8000/ws/chat`
+2. Client sends action message with proper payload structure
+3. Gateway parses message and routes to Router
+4. Router processes request type and executes appropriate backend logic
+5. Router streams chunked responses back through Gateway
+6. Client receives real-time streaming responses
+
+**Supported Actions:**
+- `chat`: Text generation/conversation with LLM function calling for device control
+- `generate_image`: Image generation requests (placeholder responses)
+- `audio_stream`: Audio data streaming for TTS/speech synthesis
+- `frontend_command`: UI-specific commands (notifications, display updates, etc.)
+
+**Example Client Interaction:**
+```javascript
+const ws = new WebSocket('ws://127.0.0.1:8000/ws/chat');
+
+// Text chat with potential device control via LLM function calling
+ws.send(JSON.stringify({
+    action: "chat",
+    payload: {text: "Turn on the living room lights and tell me about the weather"},
+    request_id: "chat-123"
+}));
+
+// Audio streaming for TTS output
+ws.send(JSON.stringify({
+    action: "audio_stream",
+    payload: {text: "Hello, this will be converted to speech", voice: "en-US-male"},
+    request_id: "audio-456"
+}));
+
+// Frontend-specific commands (notifications, UI updates)
+ws.send(JSON.stringify({
+    action: "frontend_command",
+    payload: {command: "show_notification", data: {message: "Device status updated"}},
+    request_id: "ui-789"
+}));
+```
+
+**What's Working:**
+✅ FastAPI WebSocket Gateway with connection management
+✅ Router with request orchestration and timeout handling
+✅ Structured JSON logging with performance timing
+✅ Type-safe message validation with Pydantic
+✅ Real-time response streaming to client
+✅ Pre-commit hooks for code quality
+✅ Proper architecture separation: backend handles device control via LLM function calling
+✅ Audio streaming capability for TTS and voice synthesis
+✅ Frontend command system for UI updates and notifications
+
+**Architecture Principles:**
+- Device control happens on backend via LLM function calling, not frontend execution
+- Audio streaming flows from backend to frontend for TTS/speech synthesis
+- Frontend receives display commands and notifications, handles UI/UX
+- Clear separation of concerns: backend for intelligence, frontend for presentation
+
+**Next Steps:**
+- MCP service for user/model profile management
+- Real AI adapters (OpenAI, Anthropic, local LLM) with function calling capabilities
+- Zigbee adapter for backend device control execution
+- TTS/audio generation adapters for voice synthesis
+- Authentication and user management
+- Frontend client updates to use proper backend protocol

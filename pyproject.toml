@@ -36,8 +36,10 @@ omit = ["tests/*"]
 
 [dependency-groups]
 dev = [
+    "black>=25.1.0",
     "pre-commit>=4.2.0",
     "pytest-asyncio>=1.0.0",
+    "ruff>=0.12.2",
 ]
 
 [project.optional-dependencies]

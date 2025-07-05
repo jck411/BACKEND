@@ -19,6 +19,8 @@ class ChunkType(str, Enum):
 
     TEXT = "text"
     IMAGE = "image"
+    AUDIO = "audio"
+    BINARY = "binary"
     ERROR = "error"
     METADATA = "metadata"
 
@@ -43,7 +45,9 @@ class WebSocketMessage(BaseModel):
     WebSocket message format for client-gateway communication.
     """
 
-    action: str = Field(..., description="Action type: 'chat', 'generate_image', 'device_control'")
+    action: str = Field(
+        ..., description="Action type: 'chat', 'generate_image', 'audio_stream', 'frontend_command'"
+    )
     payload: Dict[str, Any] = Field(default_factory=dict)
     request_id: str = Field(..., description="Unique request identifier")
     user_id: Optional[str] = None
