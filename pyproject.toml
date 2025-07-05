@@ -4,6 +4,13 @@ version = "0.1.0"
 description = "Modular backend for orchestrating model, user, and device profiles."
 authors = ["Your Name <your.email@example.com>"]
 requires-python = ">=3.13.0,<3.14"
+dependencies = [
+    "fastapi>=0.115.14",
+    "pydantic>=2.11.7",
+    "pyyaml>=6.0.2",
+    "uvicorn[standard]>=0.35.0",
+    "websockets>=15.0.1",
+]
 
 [tool.uv]
 # uv-specific config if needed
@@ -26,6 +33,11 @@ source = ["src"]
 
 [tool.coverage.report]
 omit = ["tests/*"]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.0.0",
+]
 
 [project.optional-dependencies]
 dev = [
