@@ -1,0 +1,36 @@
+[project]
+name = "new-backend"
+version = "0.1.0"
+description = "Modular backend for orchestrating model, user, and device profiles."
+authors = ["Your Name <your.email@example.com>"]
+requires-python = ">=3.13.0,<3.14"
+
+[tool.uv]
+# uv-specific config if needed
+
+[tool.ruff]
+line-length = 100
+exclude = [".venv", "venv", "build", "dist"]
+
+[tool.black]
+line-length = 100
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+omit = ["tests/*"]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "black",
+    "pytest",
+    "pre-commit"
+]
