@@ -61,4 +61,3 @@
 - Fail fast on invalid input; catch broad exceptions only at process boundaries
 
 See `PROJECT_RULES.md` for full rules and development standards.
-

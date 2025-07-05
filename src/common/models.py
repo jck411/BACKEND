@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 class ChunkType(str, Enum):
     """Type of data chunk being streamed."""
+
     TEXT = "text"
     IMAGE = "image"
     ERROR = "error"
@@ -25,10 +26,11 @@ class ChunkType(str, Enum):
 class Chunk(BaseModel):
     """
     Data chunk for streaming between components.
-    
+
     Used for WebSocket communication between client and gateway,
     and internal communication between components.
     """
+
     type: ChunkType
     data: Union[str, bytes]
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -40,6 +42,7 @@ class WebSocketMessage(BaseModel):
     """
     WebSocket message format for client-gateway communication.
     """
+
     action: str = Field(..., description="Action type: 'chat', 'generate_image', 'device_control'")
     payload: Dict[str, Any] = Field(default_factory=dict)
     request_id: str = Field(..., description="Unique request identifier")
@@ -50,6 +53,7 @@ class WebSocketResponse(BaseModel):
     """
     WebSocket response format from gateway to client.
     """
+
     request_id: str
     status: str = Field(..., description="Status: 'processing', 'chunk', 'complete', 'error'")
     chunk: Optional[Chunk] = None

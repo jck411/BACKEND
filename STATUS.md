@@ -66,27 +66,27 @@ Receiving responses:
 Status: processing
 Status: chunk
 Chunk: Mock response chunk 1 for action 'chat'
-Status: chunk  
+Status: chunk
 Chunk: Mock response chunk 2 for action 'chat'
 Status: chunk
-Chunk: Mock response chunk 3 for action 'chat'  
+Chunk: Mock response chunk 3 for action 'chat'
 Status: complete
 Message processing complete!
 ```
 
 ## Architecture Compliance
 
-✅ **Async/Event-Driven**: All I/O operations use async/await  
-✅ **Timeout Handling**: WebSocket connections have configurable timeouts  
-✅ **Structured Logging**: JSON logs with timing information  
-✅ **Single Responsibility**: Each file has a focused purpose  
-✅ **Type Safety**: Pydantic models with type hints throughout  
-✅ **Error Handling**: Graceful error recovery and logging  
+✅ **Async/Event-Driven**: All I/O operations use async/await
+✅ **Timeout Handling**: WebSocket connections have configurable timeouts
+✅ **Structured Logging**: JSON logs with timing information
+✅ **Single Responsibility**: Each file has a focused purpose
+✅ **Type Safety**: Pydantic models with type hints throughout
+✅ **Error Handling**: Graceful error recovery and logging
 
 ## Next Steps
 
 1. **Router Component**: Implement request routing and adapter communication
-2. **MCP Service**: Model-Context Protocol service with SQLite backend  
+2. **MCP Service**: Model-Context Protocol service with SQLite backend
 3. **Adapters**: OpenAI, Anthropic, local LLM, and Zigbee adapters
 4. **Authentication**: Add user authentication to WebSocket connections
 5. **Integration Tests**: Comprehensive test suite with pytest

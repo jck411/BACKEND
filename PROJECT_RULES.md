@@ -1,7 +1,7 @@
 # General Engineering Rules — Personal Hobby Projects
 
 ## 1 · Language & Interpreter Versions
-- Pin one exact interpreter version (e.g. `Python 3.13.0`, `Node 20.10.0`) and use it in **development, CI, staging, and production**.  
+- Pin one exact interpreter version (e.g. `Python 3.13.0`, `Node 20.10.0`) and use it in **development, CI, staging, and production**.
 - Never mix interpreter versions across environments.
 
 ---
@@ -12,51 +12,51 @@
 The assistant always knows "today" in ISO format (`YYYY-MM-DD`) and may record it in commit messages or documentation when adding new packages.
 
 ### 2.2 Adding a New Dependency
-1. Run the package-manager add command (resolves the latest compatible version as of today).  
-   - Python → `uv add <package>`  
+1. Run the package-manager add command (resolves the latest compatible version as of today).
+   - Python → `uv add <package>`
    - Node  → `npm install <package>` / `pnpm add <package>` (select one manager per project)
 2. Commit **both** the updated manifest and the generated lockfile (`uv.lock`, `package-lock.json`, `pnpm-lock.yaml`, …).
 
 ### 2.3 Installing / CI / Production
-- Always install **from the lockfile only**.  
-  - Python → `uv sync --strict`  
+- Always install **from the lockfile only**.
+  - Python → `uv sync --strict`
   - Node  → `npm ci` / `pnpm install --frozen-lockfile`
 
 ---
 
 ## 3 · Async, Concurrency & Event-Driven Design
-- Prefer event-driven patterns (async tasks, callbacks, pub/sub) over polling.  
-- Use async I/O for external operations expected to exceed 10 ms; never block the main thread or event loop.  
-- Guard long-running tasks with explicit time-outs and raise appropriate timeout errors.  
+- Prefer event-driven patterns (async tasks, callbacks, pub/sub) over polling.
+- Use async I/O for external operations expected to exceed 10 ms; never block the main thread or event loop.
+- Guard long-running tasks with explicit time-outs and raise appropriate timeout errors.
 - Shield critical sections and never swallow cancellation errors.
 
 ---
 
 ## 4 · Code Organisation & Style
-- **Single responsibility** per file; group closely related classes/functions together.  
-- **Size guardrails**  
-  - Soft warning at 150 LOC if the file contains ≥ 2 public symbols.  
-  - Hard review trigger at 300 LOC (override only with justification).  
-- **Complexity limits**  
-  - Cyclomatic complexity per file < 15.  
-  - ≤ 3 public symbols per file, except in designated *domain modules* (≤ 400 LOC and ≤ 5 publics).  
-- Reuse existing abstractions; eliminate duplication.  
-- Avoid "god" classes (`manager`, `utils`, `misc`). Focused classes such as `ConnectionManager`, `AudioController` are acceptable.  
-- Keep the repository tidy—no throw-away scripts.  
+- **Single responsibility** per file; group closely related classes/functions together.
+- **Size guardrails**
+  - Soft warning at 150 LOC if the file contains ≥ 2 public symbols.
+  - Hard review trigger at 300 LOC (override only with justification).
+- **Complexity limits**
+  - Cyclomatic complexity per file < 15.
+  - ≤ 3 public symbols per file, except in designated *domain modules* (≤ 400 LOC and ≤ 5 publics).
+- Reuse existing abstractions; eliminate duplication.
+- Avoid "god" classes (`manager`, `utils`, `misc`). Focused classes such as `ConnectionManager`, `AudioController` are acceptable.
+- Keep the repository tidy—no throw-away scripts.
 - Import order: **stdlib → third-party → internal**.
 
 ---
 
 ## 5 · Security
-- Never commit or overwrite `.env`; read secrets via environment variables.  
+- Never commit or overwrite `.env`; read secrets via environment variables.
 - Never log tokens, secrets, or PII.
 
 ---
 
 ## 6 · Testing
-- Use the language's standard testing framework.  
-- Maintain ≥ 40 % line coverage on critical logic.  
-- Linting and type checking must pass in CI.  
+- Use the language's standard testing framework.
+- Maintain ≥ 40 % line coverage on critical logic.
+- Linting and type checking must pass in CI.
 - Enforce typing gradually; missing stubs are acceptable during early development.
 
 ### 6.1 Automatic Hook Installation

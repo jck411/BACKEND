@@ -82,4 +82,3 @@ Router ↔ MCP: Fetches and updates profiles via RESTful HTTP/JSON (or gRPC for 
 MCP Updates → Router: Uses a lightweight Redis Pub/Sub channel so routers hot-reload parameter changes without restarts.
 
 Adapters → Devices: For home-automation commands, uses MQTT over TCP (via Zigbee2MQTT) at defined QoS levels to ensure reliable delivery.
-

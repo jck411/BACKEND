@@ -15,13 +15,13 @@ def main() -> None:
     """Main entry point for the gateway application."""
     # Load configuration
     config = load_config()
-    
+
     # Setup logging
     setup_logging(config)
-    
+
     # Create FastAPI app
     app = create_gateway_app(config)
-    
+
     # Run with uvicorn
     uvicorn.run(
         app,

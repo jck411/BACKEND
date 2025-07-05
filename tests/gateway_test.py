@@ -47,7 +47,7 @@ def test_websocket_connection(client: TestClient) -> None:
         # Should receive welcome message
         data = websocket.receive_text()
         response = json.loads(data)
-        
+
         assert response["request_id"] == "welcome"
         assert response["status"] == "complete"
         assert response["chunk"]["type"] == "metadata"
@@ -58,34 +58,32 @@ def test_websocket_message_handling(client: TestClient) -> None:
     with client.websocket_connect("/ws") as websocket:
         # Skip welcome message
         websocket.receive_text()
-        
+
         # Send a test message
         test_message = WebSocketMessage(
-            action="chat",
-            payload={"text": "Hello, world!"},
-            request_id="test-123"
+            action="chat", payload={"text": "Hello, world!"}, request_id="test-123"
         )
         websocket.send_text(test_message.model_dump_json())
-        
+
         # Should receive processing acknowledgment
         ack_data = websocket.receive_text()
         ack_response = json.loads(ack_data)
         assert ack_response["request_id"] == "test-123"
         assert ack_response["status"] == "processing"
-        
+
         # Should receive mock chunks
         chunk_count = 0
         while True:
             data = websocket.receive_text()
             response = json.loads(data)
-            
+
             if response["status"] == "complete":
                 break
             elif response["status"] == "chunk":
                 chunk_count += 1
                 assert response["chunk"]["type"] == "text"
                 assert "Mock response chunk" in response["chunk"]["data"]
-        
+
         assert chunk_count == 3  # Should receive 3 mock chunks
 
 
@@ -94,10 +92,10 @@ def test_invalid_message_format(client: TestClient) -> None:
     with client.websocket_connect("/ws") as websocket:
         # Skip welcome message
         websocket.receive_text()
-        
+
         # Send invalid JSON
         websocket.send_text("invalid json")
-        
+
         # Should receive error response
         data = websocket.receive_text()
         response = json.loads(data)
