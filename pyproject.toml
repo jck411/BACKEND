@@ -3,11 +3,12 @@ name = "new-backend"
 version = "0.1.0"
 description = "Modular backend for orchestrating model, user, and device profiles."
 authors = ["Your Name <your.email@example.com>"]
-requires-python = ">=3.13.0,<3.14"
+requires-python = "==3.13.0"
 dependencies = [
     "fastapi>=0.115.14",
     "pydantic>=2.11.7",
     "pyyaml>=6.0.2",
+    "structlog>=25.4.0",
     "uvicorn[standard]>=0.35.0",
     "websockets>=15.0.1",
 ]
@@ -26,6 +27,7 @@ line-length = 100
 minversion = "7.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.coverage.run]
 branch = true
@@ -37,8 +39,11 @@ omit = ["tests/*"]
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "coverage>=7.9.2",
+    "httpx>=0.28.1",
     "pre-commit>=4.2.0",
     "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
     "ruff>=0.12.2",
 ]
 

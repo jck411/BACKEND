@@ -10,15 +10,14 @@ Following PROJECT_RULES.md:
 """
 
 import asyncio
-import logging
 from typing import Any, AsyncGenerator, Dict
 
 from common.config import Config
-from common.logging import TimedLogger
+from common.logging import TimedLogger, get_logger
 from common.models import Chunk, ChunkType, WebSocketResponse
 from router.message_types import RequestType, RouterRequest
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RequestRouter:
@@ -37,12 +36,10 @@ class RequestRouter:
         self.adapters: Dict[str, Any] = {}  # Will hold adapter instances
 
         logger.info(
-            "Router initialized",
-            extra={
-                "event": "router_initialized",
-                "timeout": config.router.request_timeout,
-                "max_retries": config.router.max_retries,
-            },
+            event="router_initialized",
+            message="Router initialized",
+            timeout=config.router.request_timeout,
+            max_retries=config.router.max_retries,
         )
 
     async def process_request(
@@ -87,12 +84,10 @@ class RequestRouter:
 
             except asyncio.TimeoutError:
                 logger.warning(
-                    "Request timeout",
-                    extra={
-                        "event": "request_timeout",
-                        "request_id": router_request.request_id,
-                        "timeout": self.config.router.request_timeout,
-                    },
+                    event="request_timeout",
+                    message="Request timeout",
+                    request_id=router_request.request_id,
+                    timeout=self.config.router.request_timeout,
                 )
                 yield WebSocketResponse(
                     request_id=router_request.request_id,
@@ -101,12 +96,10 @@ class RequestRouter:
                 )
             except Exception as e:
                 logger.error(
-                    "Request processing failed",
-                    extra={
-                        "event": "request_failed",
-                        "request_id": router_request.request_id,
-                        "error": str(e),
-                    },
+                    event="request_failed",
+                    message="Request processing failed",
+                    request_id=router_request.request_id,
+                    error=str(e),
                 )
                 yield WebSocketResponse(
                     request_id=router_request.request_id,
@@ -125,12 +118,10 @@ class RequestRouter:
         text_input = request.payload.get("text", "")
 
         logger.info(
-            "Processing chat request",
-            extra={
-                "event": "chat_request_start",
-                "request_id": request.request_id,
-                "input_length": len(text_input),
-            },
+            event="chat_request_start",
+            message="Processing chat request",
+            request_id=request.request_id,
+            input_length=len(text_input),
         )
 
         # Check if request might involve device control
@@ -190,12 +181,10 @@ class RequestRouter:
         prompt = request.payload.get("prompt", "")
 
         logger.info(
-            "Processing image request",
-            extra={
-                "event": "image_request_start",
-                "request_id": request.request_id,
-                "prompt": prompt[:100],  # Log first 100 chars
-            },
+            event="image_request_start",
+            message="Processing image request",
+            request_id=request.request_id,
+            prompt=prompt[:100],  # Log first 100 chars
         )
 
         # Simulate image generation delay
@@ -222,13 +211,11 @@ class RequestRouter:
         voice = request.payload.get("voice", "en-US-default")
 
         logger.info(
-            "Processing audio request",
-            extra={
-                "event": "audio_request_start",
-                "request_id": request.request_id,
-                "text_length": len(text_input),
-                "voice": voice,
-            },
+            event="audio_request_start",
+            message="Processing audio request",
+            request_id=request.request_id,
+            text_length=len(text_input),
+            voice=voice,
         )
 
         # Simulate TTS processing delay
@@ -280,12 +267,10 @@ class RequestRouter:
         data = request.payload.get("data", {})
 
         logger.info(
-            "Processing frontend command",
-            extra={
-                "event": "frontend_command_start",
-                "request_id": request.request_id,
-                "command": command,
-            },
+            event="frontend_command_start",
+            message="Processing frontend command",
+            request_id=request.request_id,
+            command=command,
         )
 
         # Simulate frontend command processing
@@ -305,7 +290,7 @@ class RequestRouter:
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the router and cleanup resources."""
-        logger.info("Router shutting down", extra={"event": "router_shutdown"})
+        logger.info(event="router_shutdown", message="Router shutting down")
 
         # TODO: Cleanup adapter connections
         pass

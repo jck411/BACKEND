@@ -24,7 +24,9 @@
    ```
 4. Start the server:
    ```bash
-   uv run src/gateway/main.py
+   uv run python src/main.py
+   # OR use the development script:
+   # ./scripts/start_dev.sh
    ```
 5. Run linting and tests:
    ```bash

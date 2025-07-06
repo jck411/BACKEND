@@ -20,6 +20,9 @@ class GatewayConfig(BaseModel):
     port: int = Field(default=8000, description="Port to bind to")
     max_connections: int = Field(default=100, description="Maximum concurrent connections")
     connection_timeout: int = Field(default=300, description="Connection timeout in seconds")
+    max_upload_size: int = Field(
+        default=50 * 1024 * 1024, description="Maximum upload size in bytes (50MB)"
+    )
 
 
 class RouterConfig(BaseModel):

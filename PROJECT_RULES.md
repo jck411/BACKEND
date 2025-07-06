@@ -1,106 +1,99 @@
-# General Engineering Rules — Personal Hobby Projects
+# Project Rules
 
-## 1 · Language & Interpreter Versions
-- Pin one exact interpreter version (e.g. `Python 3.13.0`, `Node 20.10.0`) and use it in **development, CI, staging, and production**.
-- Never mix interpreter versions across environments.
+## Virtual Environments & Dependencies
 
----
+- Use [`uv venv`](https://github.com/astral-sh/uv) for Python virtual environments.
+  Do not use `venv` or `virtualenv` directly.
 
-## 2 · Dependencies
+## 1. Language & Interpreter Versions
 
-### 2.1 Current-Date Awareness
-The assistant always knows "today" in ISO format (`YYYY-MM-DD`) and may record it in commit messages or documentation when adding new packages.
+- Pin the exact Python version in `pyproject.toml`:
+  ```toml
+  [project]
+  requires-python = "==3.13.0"
+  ```
 
-### 2.2 Adding a New Dependency
-1. Run the package-manager add command (resolves the latest compatible version as of today).
-   - Python → `uv add <package>`
-   - Node  → `npm install <package>` / `pnpm add <package>` (select one manager per project)
-2. Commit **both** the updated manifest and the generated lockfile (`uv.lock`, `package-lock.json`, `pnpm-lock.yaml`, …).
+## 2. Dependency Management
 
-### 2.3 Installing / CI / Production
-- Always install **from the lockfile only**.
-  - Python → `uv sync --strict`
-  - Node  → `npm ci` / `pnpm install --frozen-lockfile`
+### 2.1 Adding a Dependency
 
----
+- Use the package manager:
+  - Python: `uv add <package>`
+  - Node: `npm install <package>` or `pnpm add <package>`
+- Commit both the manifest and lockfile (`uv.lock`, `package-lock.json`, etc.).
 
-## 3 · Async, Concurrency & Event-Driven Design
-- Prefer event-driven patterns (async tasks, callbacks, pub/sub) over polling.
-- Use async I/O for external operations expected to exceed 10 ms; never block the main thread or event loop.
-- Guard long-running tasks with explicit time-outs and raise appropriate timeout errors.
-- Shield critical sections and never swallow cancellation errors.
+### 2.2 Installing Dependencies / CI
 
----
+- Install strictly from the lockfile:
+  - Python: `uv sync --strict`
+  - Node: `npm ci` or `pnpm install`
 
-## 4 · Code Organisation & Style
-- **Single responsibility** per file; group closely related classes/functions together.
-- **Size guardrails**
-  - Soft warning at 150 LOC if the file contains ≥ 2 public symbols.
-  - Hard review trigger at 300 LOC (override only with justification).
-- **Complexity limits**
-  - Cyclomatic complexity per file < 15.
-  - ≤ 3 public symbols per file, except in designated *domain modules* (≤ 400 LOC and ≤ 5 publics).
-- Reuse existing abstractions; eliminate duplication.
-- Avoid "god" classes (`manager`, `utils`, `misc`). Focused classes such as `ConnectionManager`, `AudioController` are acceptable.
-- Keep the repository tidy—no throw-away scripts.
-- Import order: **stdlib → third-party → internal**.
+## 3. Async, Concurrency & Event-Driven Design
 
----
+- Use event-driven patterns (async tasks, callbacks, pub/sub).
+- Use async I/O for external ops >10 ms; never block the main thread.
+- Set timeouts for long tasks and raise timeout errors.
+- Protect critical sections; never suppress cancellation errors.
 
-## 5 · Security
+## 4. Code Organisation & Style
+
+- Each file should have a single responsibility.
+- Keep files small and focused (<150 lines, avoid >300 lines).
+- Limit complexity: cyclomatic complexity <15, ≤3 public symbols per file (domain modules: up to 5, 400 LOC).
+- Reuse abstractions, eliminate duplication, avoid "god" classes.
+- Use focused names (e.g., `ConnectionManager`).
+- Import order: stdlib → third-party → internal.
+
+## 5. Security
+
 - Never commit or overwrite `.env`; read secrets via environment variables.
 - Never log tokens, secrets, or PII.
 
----
+## 6. Testing
 
-## 6 · Testing
-- Use the language's standard testing framework.
-- Maintain ≥ 40 % line coverage on critical logic.
+- Use the standard testing framework (e.g., `pytest` for Python).
+- Maintain ≥40% line coverage on critical logic.
+- Place all tests in `tests/`.
 - Linting and type checking must pass in CI.
-- Enforce typing gradually; missing stubs are acceptable during early development.
+- Enforce typing gradually.
 
 ### 6.1 Automatic Hook Installation
 
-**Python (uv)**
+Python (uv):
 ```bash
 uv add --dev pre-commit
 uv run pre-commit install
+# Optional: Enable pre-commit hooks by default in all new repos:
 uv run pre-commit init-templatedir ~/.git-template
 git config --global init.templateDir ~/.git-template
 ```
+- Ensure `.pre-commit-config.yaml` is present.
 
-**Other Languages**
-Install pre-commit with the language's package manager and initialise the hooks similarly.
+## 7. Logging
 
----
+- Use `structlog` for structured JSON logging.
+- Include `event`, `module`, and `elapsed_ms` fields.
 
-## 7 · Logging & Observability
-- Emit structured JSON logs containing `event`, `module`, and `elapsed_ms`.
-- No metrics endpoints for hobby projects—keep it simple.
+## 8. Performance
 
----
+- Optimize only after profiling shows a pure function uses >2% of total CPU/time.
+- Set realistic SLOs; avoid premature optimization.
 
-## 8 · Performance
-- Optimise only after profiling shows a pure function consumes > 2 % of total CPU/time.
-- Set realistic SLOs; avoid premature optimisation.
+## 9. Error Handling
 
----
-
-## 9 · Error Handling
 1. Identify potential failure points.
 2. Instrument logging at those points.
-3. Analyse logs to determine root causes.
-4. Address those specific causes.
-- Fail fast on invalid input using language-appropriate error types.
+3. Analyze logs to determine root causes.
+4. Address those causes.
+- Fail fast on invalid input.
 - Catch broad exceptions only at process boundaries.
-- Fix root causes rather than layering fallbacks.
+- Fix root causes, not symptoms.
 
----
+## 10. General Engineering Principles
 
-## 10 · General Engineering Principles
-- Prefer simple solutions; delete fallback configurations and obsolete paths.
-- Adopt new technology only when it fully replaces the old—then remove the old implementation.
-- Avoid stubbing or fake data outside tests; never mock production or development data.
+- Prefer simple solutions; remove obsolete paths.
+- Adopt new tech only when it fully replaces the old.
+- Avoid stubbing/fake data outside tests.
 - Deliver exactly what is requested; propose enhancements separately.
-- Focus on functionality over enterprise-grade features for hobby projects.
-- Keep personal project scope manageable.
+- Focus on functionality over enterprise features for hobby projects.
+- Keep project scope manageable.

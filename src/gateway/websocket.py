@@ -1,126 +1,40 @@
 """
 WebSocket gateway using FastAPI.
 
-Handles client connections, authentication, and message framing.
+Main gateway orchestrator that delegates to specialized handlers.
 Following PROJECT_RULES.md:
 - Async/await for all I/O operations
 - Timeout handling for long-running tasks
 - Structured logging with elapsed_ms
-- Single responsibility per file
+- Single responsibility: WebSocket protocol handling
 """
 
 import asyncio
-import logging
 import uuid
-from typing import Dict, Optional, Set
+from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from common.config import Config
-from common.logging import TimedLogger
+from common.logging import TimedLogger, get_logger
 from common.models import WebSocketMessage, WebSocketResponse, Chunk, ChunkType
+from gateway.connection_manager import ConnectionManager
 from router.message_types import RequestType, RouterRequest
 from router.request_router import RequestRouter
 
-logger = logging.getLogger(__name__)
-
-
-class ConnectionManager:
-    """Manages WebSocket connections and message broadcasting."""
-
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
-        self.user_connections: Dict[str, Set[str]] = {}  # user_id -> set of connection_ids
-
-    async def connect(
-        self, websocket: WebSocket, connection_id: str, user_id: Optional[str] = None
-    ) -> None:
-        """Accept a new WebSocket connection."""
-        await websocket.accept()
-        self.active_connections[connection_id] = websocket
-
-        if user_id:
-            if user_id not in self.user_connections:
-                self.user_connections[user_id] = set()
-            self.user_connections[user_id].add(connection_id)
-
-        logger.info(
-            "WebSocket connection established",
-            extra={
-                "event": "connection_established",
-                "connection_id": connection_id,
-                "user_id": user_id,
-                "total_connections": len(self.active_connections),
-            },
-        )
-
-    def disconnect(self, connection_id: str, user_id: Optional[str] = None) -> None:
-        """Remove a WebSocket connection."""
-        if connection_id in self.active_connections:
-            del self.active_connections[connection_id]
-
-        if user_id and user_id in self.user_connections:
-            self.user_connections[user_id].discard(connection_id)
-            if not self.user_connections[user_id]:
-                del self.user_connections[user_id]
-
-        logger.info(
-            "WebSocket connection closed",
-            extra={
-                "event": "connection_closed",
-                "connection_id": connection_id,
-                "user_id": user_id,
-                "total_connections": len(self.active_connections),
-            },
-        )
-
-    async def send_to_connection(self, connection_id: str, response: WebSocketResponse) -> bool:
-        """
-        Send a response to a specific connection.
-
-        Returns:
-            True if sent successfully, False if connection not found or failed
-        """
-        if connection_id not in self.active_connections:
-            return False
-
-        websocket = self.active_connections[connection_id]
-        try:
-            await websocket.send_text(response.model_dump_json())
-            return True
-        except Exception as e:
-            logger.warning(
-                "Failed to send message to connection",
-                extra={"event": "send_failed", "connection_id": connection_id, "error": str(e)},
-            )
-            return False
-
-    async def broadcast_to_user(self, user_id: str, response: WebSocketResponse) -> int:
-        """
-        Broadcast a response to all connections for a user.
-
-        Returns:
-            Number of connections that received the message
-        """
-        if user_id not in self.user_connections:
-            return 0
-
-        sent_count = 0
-        for connection_id in self.user_connections[user_id]:
-            if await self.send_to_connection(connection_id, response):
-                sent_count += 1
-
-        return sent_count
+logger = get_logger(__name__)
 
 
 class WebSocketGateway:
-    """FastAPI WebSocket gateway."""
+    """FastAPI WebSocket gateway that orchestrates connections and routing."""
 
     def __init__(self, config: Config):
         self.config = config
         self.app = FastAPI(title="Backend Gateway", version="0.1.0")
         self.connection_manager = ConnectionManager()
+        # TODO: Add media handler when needed for binary/media processing
+        # self.media_handler = MediaHandler(max_file_size=config.gateway.max_upload_size)
         self.router = RequestRouter(config)
 
         # Setup routes
@@ -135,7 +49,7 @@ class WebSocketGateway:
             return JSONResponse(
                 {
                     "status": "healthy",
-                    "active_connections": len(self.connection_manager.active_connections),
+                    "active_connections": self.connection_manager.get_connection_count(),
                 }
             )
 
@@ -169,17 +83,16 @@ class WebSocketGateway:
 
         except WebSocketDisconnect:
             logger.info(
-                "WebSocket client disconnected",
-                extra={"event": "client_disconnect", "connection_id": connection_id},
+                event="client_disconnect",
+                message="WebSocket client disconnected",
+                connection_id=connection_id,
             )
         except Exception as e:
             logger.error(
-                "WebSocket connection error",
-                extra={
-                    "event": "connection_error",
-                    "connection_id": connection_id,
-                    "error": str(e),
-                },
+                event="connection_error",
+                message="WebSocket connection error",
+                connection_id=connection_id,
+                error=str(e),
             )
         finally:
             self.connection_manager.disconnect(connection_id, user_id)
@@ -200,24 +113,20 @@ class WebSocketGateway:
 
             except asyncio.TimeoutError:
                 logger.warning(
-                    "WebSocket connection timeout",
-                    extra={
-                        "event": "connection_timeout",
-                        "connection_id": connection_id,
-                        "timeout_seconds": self.config.gateway.connection_timeout,
-                    },
+                    event="connection_timeout",
+                    message="WebSocket connection timeout",
+                    connection_id=connection_id,
+                    timeout_seconds=self.config.gateway.connection_timeout,
                 )
                 break
             except WebSocketDisconnect:
                 break
             except Exception as e:
                 logger.error(
-                    "Error processing WebSocket message",
-                    extra={
-                        "event": "message_processing_error",
-                        "connection_id": connection_id,
-                        "error": str(e),
-                    },
+                    event="message_processing_error",
+                    message="Error processing WebSocket message",
+                    connection_id=connection_id,
+                    error=str(e),
                 )
                 # Send error response to client
                 error_response = WebSocketResponse(
@@ -234,13 +143,11 @@ class WebSocketGateway:
             message = WebSocketMessage.model_validate_json(message_data)
 
             logger.info(
-                "Processing WebSocket message",
-                extra={
-                    "event": "message_received",
-                    "connection_id": connection_id,
-                    "action": message.action,
-                    "request_id": message.request_id,
-                },
+                event="message_received",
+                message="Processing WebSocket message",
+                connection_id=connection_id,
+                action=message.action,
+                request_id=message.request_id,
             )
 
             # Send processing acknowledgment
@@ -252,13 +159,11 @@ class WebSocketGateway:
 
         except Exception as e:
             logger.error(
-                "Failed to parse WebSocket message",
-                extra={
-                    "event": "message_parse_error",
-                    "connection_id": connection_id,
-                    "error": str(e),
-                    "raw_message": message_data[:200],  # Log first 200 chars
-                },
+                event="message_parse_error",
+                message="Failed to parse WebSocket message",
+                connection_id=connection_id,
+                error=str(e),
+                raw_message=message_data[:200],  # Log first 200 chars
             )
             # Send error response
             error_response = WebSocketResponse(
@@ -288,12 +193,10 @@ class WebSocketGateway:
 
         except Exception as e:
             logger.error(
-                "Router processing failed",
-                extra={
-                    "event": "router_processing_failed",
-                    "connection_id": connection_id,
-                    "error": str(e),
-                },
+                event="router_processing_failed",
+                message="Router processing failed",
+                connection_id=connection_id,
+                error=str(e),
             )
             # Send error response
             error_response = WebSocketResponse(
