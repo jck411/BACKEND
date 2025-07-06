@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 from common.config import Config
 from common.logging import TimedLogger, get_logger
-from common.models import WebSocketMessage, WebSocketResponse, Chunk, ChunkType
+from common.models import WebSocketMessage, WebSocketResponse
 from gateway.connection_manager import ConnectionManager
 from router.message_types import RequestType, RouterRequest
 from router.request_router import RequestRouter
@@ -65,18 +65,6 @@ class WebSocketGateway:
 
         try:
             await self.connection_manager.connect(websocket, connection_id, user_id)
-
-            # Send welcome message
-            welcome_response = WebSocketResponse(
-                request_id="welcome",
-                status="complete",
-                chunk=Chunk(
-                    type=ChunkType.METADATA,
-                    data=f"Connected with ID: {connection_id}",
-                    metadata={"connection_id": connection_id},
-                ),
-            )
-            await self.connection_manager.send_to_connection(connection_id, welcome_response)
 
             # Handle incoming messages
             await self._message_loop(websocket, connection_id, user_id)
