@@ -24,7 +24,7 @@ async def test_chat():
         chat_message = {
             "action": "chat",
             "payload": {"text": "What can you help me with?"},
-            "request_id": "chat-test-001"
+            "request_id": "chat-test-001",
         }
 
         print(f"Sending: {chat_message['action']}")
@@ -35,9 +35,9 @@ async def test_chat():
             response = await websocket.recv()
             data = json.loads(response)
 
-            if data['status'] == 'chunk' and data.get('chunk'):
+            if data["status"] == "chunk" and data.get("chunk"):
                 print(f"Chat chunk: {data['chunk']['data']}")
-            elif data['status'] == 'complete':
+            elif data["status"] == "complete":
                 print("Chat complete!\n")
                 break
 
@@ -55,7 +55,7 @@ async def test_image_generation():
         image_message = {
             "action": "generate_image",
             "payload": {"prompt": "A beautiful sunset over mountains"},
-            "request_id": "image-test-001"
+            "request_id": "image-test-001",
         }
 
         print(f"Sending: {image_message['action']}")
@@ -66,9 +66,9 @@ async def test_image_generation():
             response = await websocket.recv()
             data = json.loads(response)
 
-            if data['status'] == 'chunk' and data.get('chunk'):
+            if data["status"] == "chunk" and data.get("chunk"):
                 print(f"Image chunk: {data['chunk']['data']}")
-            elif data['status'] == 'complete':
+            elif data["status"] == "complete":
                 print("Image generation complete!\n")
                 break
 
@@ -86,7 +86,7 @@ async def test_device_control():
         device_message = {
             "action": "device_control",
             "payload": {"device_id": "living_room_light", "action": "turn_on"},
-            "request_id": "device-test-001"
+            "request_id": "device-test-001",
         }
 
         print(f"Sending: {device_message['action']}")
@@ -97,9 +97,9 @@ async def test_device_control():
             response = await websocket.recv()
             data = json.loads(response)
 
-            if data['status'] == 'chunk' and data.get('chunk'):
+            if data["status"] == "chunk" and data.get("chunk"):
                 print(f"Device chunk: {data['chunk']['data']}")
-            elif data['status'] == 'complete':
+            elif data["status"] == "complete":
                 print("Device control complete!\n")
                 break
 

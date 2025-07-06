@@ -33,8 +33,17 @@ class RouterConfig(BaseModel):
 
 
 class ProviderConfig(BaseModel):
-    """Temporary configuration for AI providers (will move to MCP later)."""
+    """Configuration for AI providers - runtime configurable."""
 
+    # Provider selection (no fallbacks - strict mode)
+    active: str = Field(
+        default="openai", description="Active provider (openai|anthropic|gemini|openrouter)"
+    )
+
+    # Strict mode: fail fast if provider unavailable (no fallbacks)
+    strict_mode: bool = Field(default=True, description="Strict mode - no fallbacks")
+
+    # OpenAI settings
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
     openai_temperature: float = Field(default=0.7, description="OpenAI temperature setting")
     openai_max_tokens: Optional[int] = Field(default=None, description="OpenAI max tokens limit")
@@ -43,11 +52,36 @@ class ProviderConfig(BaseModel):
         description="System prompt for OpenAI",
     )
 
+    # Anthropic settings (temporary - will move to MCP)
     anthropic_model: str = Field(
         default="claude-3-5-sonnet-20241022", description="Anthropic model to use"
     )
     anthropic_temperature: float = Field(default=0.7, description="Anthropic temperature setting")
     anthropic_max_tokens: int = Field(default=4096, description="Anthropic max tokens limit")
+    anthropic_system_prompt: str = Field(
+        default="You are a helpful AI assistant with access to smart home devices. When users ask to control devices, use the available functions to execute their requests.",
+        description="System prompt for Anthropic",
+    )
+
+    # Gemini settings (temporary - will move to MCP)
+    gemini_model: str = Field(default="gemini-1.5-flash", description="Gemini model to use")
+    gemini_temperature: float = Field(default=0.7, description="Gemini temperature setting")
+    gemini_max_tokens: int = Field(default=4096, description="Gemini max tokens limit")
+    gemini_system_prompt: str = Field(
+        default="You are a helpful AI assistant with access to smart home devices. When users ask to control devices, use the available functions to execute their requests.",
+        description="System prompt for Gemini",
+    )
+
+    # OpenRouter settings (temporary - will move to MCP)
+    openrouter_model: str = Field(
+        default="anthropic/claude-3-sonnet", description="OpenRouter model to use"
+    )
+    openrouter_temperature: float = Field(default=0.7, description="OpenRouter temperature setting")
+    openrouter_max_tokens: int = Field(default=4096, description="OpenRouter max tokens limit")
+    openrouter_system_prompt: str = Field(
+        default="You are a helpful AI assistant with access to smart home devices. When users ask to control devices, use the available functions to execute their requests.",
+        description="System prompt for OpenRouter",
+    )
 
 
 class MCPConfig(BaseModel):
@@ -97,6 +131,10 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     # Router config
     if "ROUTER_TIMEOUT" in os.environ:
         config_data.setdefault("router", {})["request_timeout"] = int(os.environ["ROUTER_TIMEOUT"])
+
+    # Provider selection (temporary - will move to MCP)
+    if "ACTIVE_PROVIDER" in os.environ:
+        config_data.setdefault("providers", {})["active"] = os.environ["ACTIVE_PROVIDER"]
 
     # MCP config
     if "MCP_DATABASE_PATH" in os.environ:

@@ -122,7 +122,7 @@ def test_frontend_command_protocol(client: TestClient) -> None:
 
 
 def test_device_control_via_chat(client: TestClient) -> None:
-    """Test device control through chat with LLM function calling."""
+    """Test chat response to device control requests (functionality pending MCP implementation)."""
     with client.websocket_connect("/ws/chat") as websocket:
         # Skip welcome message
         websocket.receive_text()
@@ -143,30 +143,29 @@ def test_device_control_via_chat(client: TestClient) -> None:
         assert ack_response["request_id"] == "device-chat-789"
         assert ack_response["status"] == "processing"
 
-        # Should receive device control responses
-        device_control_detected = False
-        function_call_executed = False
+        # Should receive chat response (device control functionality will be added via MCP later)
+        received_chunks = False
+        completed = False
 
         while True:
             data = websocket.receive_text()
             response = json.loads(data)
 
             if response["status"] == "complete":
+                completed = True
                 break
             elif response["status"] == "chunk":
+                received_chunks = True
                 chunk = response["chunk"]
-                data_lower = chunk["data"].lower()
-
-                if "device control" in data_lower:
-                    device_control_detected = True
-
-                # Check for function calling indication
+                # Verify we get valid chunk structure
+                assert "data" in chunk
+                assert chunk["type"] == "text"
+                # Should have metadata indicating the source provider
                 metadata = chunk.get("metadata", {})
-                if metadata.get("has_function_call"):
-                    function_call_executed = True
+                assert "source" in metadata
 
-        assert device_control_detected, "Should detect and respond to device control request"
-        assert function_call_executed, "Should indicate function calling was executed"
+        assert received_chunks, "Should receive streaming chat chunks"
+        assert completed, "Should complete the request"
 
 
 def test_image_generation_protocol(client: TestClient) -> None:

@@ -157,7 +157,11 @@ async def test_request_timeout_handling(router: RequestRouter) -> None:
     # This test would need actual timeout simulation,
     # but for now we test that the router initializes correctly
     assert router.config is not None
-    assert router.adapters == {}
+    # With multi-provider support, we should have adapters available
+    assert len(router.adapters) > 0
+    # Test that we can get an active adapter
+    active_adapter = router._get_active_adapter()
+    assert active_adapter is not None
 
 
 @pytest.mark.asyncio

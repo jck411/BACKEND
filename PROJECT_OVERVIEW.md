@@ -15,17 +15,20 @@ The backend project implements a flexible, LAN-only backend that:
 ### Current Implementation (v0.1 - Working Base)
 - ✅ **WebSocket Gateway**: FastAPI-based streaming gateway with connection management
 - ✅ **Request Router**: Request orchestration with timeout handling and response streaming
+- ✅ **Multi-Provider Support**: OpenAI, Anthropic, Gemini, and OpenRouter adapters with unified interface
+- ✅ **Runtime Configuration**: Strict mode provider selection with immediate switching (no fallbacks)
 - ✅ **OpenAI Integration**: Real-time streaming chat completions with optimized performance
+- ✅ **Anthropic Integration**: Claude models with streaming support and error handling
+- ✅ **Gemini Integration**: Google Gemini models with async streaming capabilities
+- ✅ **OpenRouter Integration**: Access to 100+ models through unified OpenAI-compatible API
 - ✅ **Structured Logging**: JSON logs with performance metrics and timing information
 - ✅ **Type Safety**: Pydantic models with comprehensive validation
 - ✅ **Automation Tools**: Pre-commit hooks, linting, testing infrastructure
-- ✅ **Configuration Management**: YAML-based config with environment variable overrides
-- ✅ **Examples & Testing**: WebSocket test clients and action examples
+- ✅ **Configuration Management**: Runtime provider switching with environment-based API keys
+- ✅ **Examples & Testing**: WebSocket test clients and provider switching utilities
 - ✅ **High-Performance Streaming**: Zero-delay content forwarding with no duplication
 
 ### Planned Features (Future Versions)
-- 🔄 **Multi-Provider Support**: Anthropic (Claude), Google (Gemini), OpenRouter, local LLMs
-- 🔄 **Provider Selection**: Configuration-driven provider selection with unified interface
 - 🔄 **Central MCP Service**: User profiles, model configurations, chat history, device definitions
 - 🔄 **MCP Tool Integration**: Function calling and tool orchestration via MCP servers
 - 🔄 **Home Automation**: Zigbee device control via MQTT/Zigbee2MQTT through MCP tools
@@ -34,7 +37,7 @@ The backend project implements a flexible, LAN-only backend that:
 - 🔄 **Authentication**: User management and WebSocket authentication
 - 🔄 **TTS/Audio**: Text-to-speech and audio streaming capabilities
 
-## 3. Current Status (Updated 2025-07-05)
+## 3. Current Status (Updated 2025-07-06)
 
 ### ✅ Successfully Implemented Components
 
@@ -44,11 +47,16 @@ The backend project implements a flexible, LAN-only backend that:
 - Structured JSON logging with performance timing (`TimedLogger`)
 - Type-safe message validation using Pydantic models
 
-**Real AI Integration:**
+**Multi-Provider AI Integration:**
 - **OpenAI Adapter**: Production-ready streaming chat completions with optimized performance
+- **Anthropic Adapter**: Claude models (claude-3-5-sonnet-20241022) with streaming support
+- **Google Gemini Adapter**: Gemini models (gemini-1.5-flash) with async streaming capabilities
+- **OpenRouter Adapter**: Access to 100+ models through unified OpenAI-compatible API
+- **Runtime Provider Switching**: Immediate provider changes via runtime_config.yaml (no restart required)
+- **Strict Mode**: No fallbacks - fail fast when provider unavailable (following PROJECT_RULES.md)
 - **High-Performance Streaming**: Zero-delay content forwarding, immediate chunk delivery
 - **Error Handling**: Comprehensive API timeout, rate limit, and error recovery
-- **Clean Architecture**: Simplified design without premature function calling complexity
+- **Clean Architecture**: Unified `BaseAdapter` interface for all providers
 
 **Data Models:**
 - `Chunk` - Streaming content structure (text, images, metadata)
@@ -57,16 +65,20 @@ The backend project implements a flexible, LAN-only backend that:
 - `AdapterRequest/Response` - Unified interface for all AI providers
 
 **Configuration System:**
-- YAML-based configuration with environment variable overrides
-- Provider selection framework ready for multi-provider support
-- Security-compliant (API keys from environment, no secrets in config)
-- Temporary inference settings (will migrate to MCP service)
+- Runtime configuration file (runtime_config.yaml) for immediate provider switching
+- Environment-based API key management (no secrets in configuration files)
+- Strict mode enabled by default (no fallbacks, fail fast)
+- Automatic configuration reloading with file change detection
+- Provider-specific model settings (temperature, max_tokens, system prompts)
+- Future-ready for frontend integration with planned API endpoints
 
 **Infrastructure:**
 - Pre-commit hooks with Ruff and Black
 - Pytest test suite with async support and real API testing
 - Scripts for linting and server startup
 - Production-ready WebSocket client examples
+- Provider switching utility (switch_provider.py) for easy runtime configuration
+- Comprehensive multi-provider test suite with strict mode validation
 
 ### 🏗️ **Architecture Lessons Learned**
 
@@ -78,23 +90,23 @@ The backend project implements a flexible, LAN-only backend that:
 
 **Provider Architecture Design:**
 - **Unified Interface**: All providers implement `BaseAdapter` with standardized request/response
+- **Runtime Switching**: Change providers instantly via runtime_config.yaml editing
+- **Strict Mode**: No fallbacks, fail fast when provider unavailable (PROJECT_RULES.md compliant)
 - **MCP-Ready**: Architecture designed for future MCP integration without breaking changes
 - **Configuration Separation**: Provider selection vs. inference parameters clearly separated
-- **Extensible**: Adding new providers (Anthropic, Gemini) follows same pattern
+- **Extensible**: Adding new providers follows established adapter pattern
 
 ### 🔄 Architecture Ready for Extension
 
 **Multi-Provider Framework:**
 - `src/adapters/base.py` - Standardized adapter interface for all AI providers
-- `src/adapters/openai_adapter.py` - Working production adapter as template
-- Configuration framework ready for provider selection (OpenAI → Anthropic → Gemini)
-- All inference parameters (temperature, max_tokens, system_prompts) will migrate to MCP
-
-**Planned Provider Integration:**
-- `src/adapters/anthropic_adapter.py` - Claude integration following OpenAI pattern
-- `src/adapters/gemini_adapter.py` - Google Gemini integration
-- `src/adapters/openrouter_adapter.py` - Multi-model access via OpenRouter
-- `src/adapters/local_llm_adapter.py` - Self-hosted model integration
+- `src/adapters/openai_adapter.py` - Production adapter with streaming optimization
+- `src/adapters/anthropic_adapter.py` - Claude integration with streaming support
+- `src/adapters/gemini_adapter.py` - Google Gemini integration with async streaming
+- `src/adapters/openrouter_adapter.py` - Multi-model access via OpenRouter API
+- `src/common/runtime_config.py` - Runtime configuration management with auto-reload
+- `runtime_config.yaml` - Runtime provider selection and model configuration
+- `switch_provider.py` - Command-line utility for easy provider switching
 
 **MCP Service Integration Points:**
 - Provider configurations and model parameters
@@ -171,18 +183,20 @@ BACKEND/
 ├── pyproject.toml    # Dependencies and tooling config
 ├── uv.lock          # Locked dependencies for reproducible builds
 ├── .env.example      # Environment variables template
-├── config.yaml       # Single configuration for all components
+├── config.yaml       # System configuration (gateway, router, etc.)
+├── runtime_config.yaml # Runtime provider selection and model settings
+├── switch_provider.py # Command-line utility for provider switching
 │
 ├── src/              # Main application code
 │   ├── main.py       # Application entry point
 │   ├── gateway/      # WebSocket endpoint and connection management
 │   ├── router/       # Request orchestration and adapter coordination
-│   ├── adapters/     # Plugins for AI providers and Zigbee (empty, planned)
-│   ├── mcp/          # Model-Context Protocol service (empty, planned)
-│   └── common/       # Shared types, utilities, config loader, and logging
+│   ├── adapters/     # AI provider adapters (OpenAI, Anthropic, Gemini, OpenRouter)
+│   ├── mcp/          # Model-Context Protocol service (planned)
+│   └── common/       # Shared types, utilities, config loader, runtime config, and logging
 │
 ├── tests/            # Unit and integration tests
-├── examples/         # Test clients and action examples
+├── examples/         # Test clients, provider switching demos, and action examples
 └── scripts/          # Helper scripts (lint, start)
 
 ## 6. Key Components
@@ -260,67 +274,83 @@ The system now has a **production-ready implementation** with real OpenAI integr
 
 **Current Provider Support:**
 - ✅ **OpenAI**: Production-ready with gpt-4o-mini, streaming optimization
-- 🔄 **Anthropic**: Planned (Claude models)
-- 🔄 **Google Gemini**: Planned (Gemini models)
-- 🔄 **OpenRouter**: Planned (multi-model access)
+- ✅ **Anthropic**: Claude models with claude-3-5-sonnet-20241022, streaming support
+- ✅ **Google Gemini**: Gemini models with gemini-1.5-flash, async streaming
+- ✅ **OpenRouter**: Multi-model access with anthropic/claude-3-sonnet
 - 🔄 **Local LLMs**: Planned (self-hosted models)
 
-**Example Client Interaction:**
+**Example Provider Switching:**
+```bash
+# Switch providers instantly via command line
+python switch_provider.py anthropic
+python switch_provider.py gemini
+python switch_provider.py --show  # Check current provider
+
+# Or edit runtime_config.yaml directly:
+# provider:
+#   active: "anthropic"  # Changes take effect immediately
+```
+
+**Real-time chat with any provider:**
 ```javascript
 const ws = new WebSocket('ws://127.0.0.1:8000/ws/chat');
 
-// Real-time chat with OpenAI streaming
+// Works with OpenAI, Anthropic, Gemini, or OpenRouter
 ws.send(JSON.stringify({
     action: "chat",
     payload: {text: "Tell me a joke"},
     request_id: "chat-123"
 }));
 
-// Receive real streaming response
+// Receive real streaming response from selected provider
 ws.onmessage = (event) => {
     const response = JSON.parse(event.data);
     if (response.status === 'chunk') {
-        // Real OpenAI content streaming in real-time
+        // Real AI content streaming in real-time
         console.log(response.chunk.data); // "Why", " did", " the", " chicken..."
     }
 };
 ```
 
 **What's Working Now:**
-✅ **Real AI Integration**: Live OpenAI API with streaming responses
+✅ **Multi-Provider AI Integration**: OpenAI, Anthropic, Gemini, OpenRouter with streaming
+✅ **Runtime Provider Switching**: Instant provider changes via runtime_config.yaml
+✅ **Strict Mode**: No fallbacks, fail fast behavior (PROJECT_RULES.md compliant)
 ✅ **High-Performance Streaming**: <1ms chunk forwarding, zero duplication
 ✅ **Production WebSocket Gateway**: Connection management with structured logging
-✅ **Provider Architecture**: Extensible framework ready for multiple AI providers
-✅ **Configuration Management**: Provider selection + environment-based API keys
+✅ **Provider Architecture**: Extensible framework with unified BaseAdapter interface
+✅ **Configuration Management**: Runtime config with environment-based API keys
 ✅ **Error Handling**: API timeouts, rate limits, connection failures handled gracefully
+✅ **Provider Switching Utilities**: Command-line tools and Python API for switching
 ✅ **Frontend Ready**: Production-ready for any frontend framework
 
 **Architecture Principles:**
-- **Provider Selection**: Configured once, applies to all requests
-- **Inference Parameters**: Currently in config, will migrate to MCP service
+- **Runtime Provider Switching**: Instant changes via runtime_config.yaml editing
+- **Strict Mode**: No fallbacks, fail fast when provider unavailable
+- **Inference Parameters**: Managed in runtime_config.yaml (will migrate to MCP service)
 - **Streaming Performance**: Immediate forwarding with zero processing delays
 - **Extensibility**: Adding new providers follows established adapter pattern
 - **MCP Ready**: Architecture designed for future MCP integration without breaking changes
 
 ## 9. Next Implementation Steps
 
-### Immediate Priorities (Multi-Provider Support)
+### Immediate Priorities (Completed - Multi-Provider Support)
 
-1. **AI Provider Adapters** - Extend the proven OpenAI pattern
-   - **Anthropic Adapter**: Claude integration following OpenAI architecture
-   - **Google Gemini Adapter**: Gemini Pro/Flash models with streaming
-   - **OpenRouter Adapter**: Multi-model access via unified API
-   - **Provider Selection**: Configuration-driven provider switching
+1. **✅ AI Provider Adapters** - Extended the proven OpenAI pattern
+   - **✅ Anthropic Adapter**: Claude integration with streaming support
+   - **✅ Google Gemini Adapter**: Gemini models with async streaming capabilities
+   - **✅ OpenRouter Adapter**: Multi-model access via unified API
+   - **✅ Runtime Provider Switching**: Instant provider changes via configuration
 
-2. **Enhanced Configuration Management**
-   - **Provider Selection Config**: Single config setting for active provider
-   - **API Key Management**: Environment-based secrets for all providers
-   - **Provider-Specific Settings**: Model names, endpoints, rate limits per provider
-   - **Fallback Logic**: Automatic provider switching on failures
+2. **✅ Enhanced Configuration Management**
+   - **✅ Runtime Configuration**: runtime_config.yaml for immediate provider switching
+   - **✅ API Key Management**: Environment-based secrets for all providers
+   - **✅ Provider-Specific Settings**: Model names, temperatures, system prompts per provider
+   - **✅ Strict Mode**: No fallbacks, fail fast behavior (PROJECT_RULES.md compliant)
 
-3. **MCP Service Foundation**
+3. **MCP Service Foundation** (Next Priority)
    - **SQLite Backend**: User profiles, model configurations, chat history
-   - **Parameter Migration**: Move inference settings from config to MCP
+   - **Parameter Migration**: Move inference settings from runtime config to MCP
    - **RESTful API**: Configuration management endpoints
    - **Real-time Updates**: Redis Pub/Sub for parameter changes
 
@@ -348,9 +378,23 @@ ws.onmessage = (event) => {
 
 **Configuration Strategy:**
 ```yaml
-# config.yaml - Provider selection only
+# runtime_config.yaml - Immediate provider switching
+provider:
+  active: "anthropic"  # openai | anthropic | gemini | openrouter
+  models:
+    anthropic:
+      model: "claude-3-5-sonnet-20241022"
+      temperature: 0.7
+      max_tokens: 4096
+
+# Changes take effect immediately, no restart required
+```
+
+**Future MCP Migration:**
+```yaml
+# config.yaml - Provider selection only (future)
 providers:
-  active: "openai"  # openai | anthropic | gemini | openrouter
+  active: "anthropic"  # Managed by MCP service
 
 # All inference parameters migrate to MCP service:
 # - temperature, max_tokens, system_prompts

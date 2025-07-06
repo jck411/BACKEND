@@ -63,10 +63,14 @@ def test_websocket_message_creation():
 def test_websocket_message_validation():
     """Test WebSocketMessage validation."""
     with pytest.raises(ValidationError):
-        # Missing required fields
-        WebSocketMessage(action="chat", request_id="missing")
+        # Missing required action field
+        WebSocketMessage(request_id="req-123")
 
-    # Valid minimal message
+    with pytest.raises(ValidationError):
+        # Missing required request_id field
+        WebSocketMessage(action="chat")
+
+    # Valid minimal message (payload defaults to empty dict)
     message = WebSocketMessage(action="chat", request_id="req-123")
     assert message.payload == {}
     assert message.user_id is None

@@ -32,7 +32,7 @@ async def test_simple_chat():
             chat_message = {
                 "action": "chat",
                 "payload": {"text": "Hello! Please tell me a short joke."},
-                "request_id": str(uuid.uuid4())
+                "request_id": str(uuid.uuid4()),
             }
 
             print(f"\n📤 Sending: {chat_message['payload']['text']}")
@@ -44,21 +44,21 @@ async def test_simple_chat():
             async for message in websocket:
                 try:
                     response = json.loads(message)
-                    status = response.get('status', 'unknown')
+                    status = response.get("status", "unknown")
 
-                    if status == 'chunk':
-                        chunk = response.get('chunk', {})
-                        if chunk.get('type') == 'text':
-                            content = chunk.get('data', '')
+                    if status == "chunk":
+                        chunk = response.get("chunk", {})
+                        if chunk.get("type") == "text":
+                            content = chunk.get("data", "")
                             response_content += content
-                            print(content, end='', flush=True)
+                            print(content, end="", flush=True)
 
-                    elif status == 'complete':
+                    elif status == "complete":
                         print("\n\n✅ Chat completed!")
                         print(f"📊 Full response: {response_content}")
                         break
 
-                    elif status == 'error':
+                    elif status == "error":
                         print(f"\n❌ Error: {response.get('error', 'Unknown error')}")
                         break
 

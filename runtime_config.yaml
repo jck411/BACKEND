@@ -1,0 +1,34 @@
+provider:
+  active: openai # Change this to: openai | anthropic | gemini | openrouter
+  models:
+    anthropic:
+      max_tokens: 4096
+      model: claude-3-5-sonnet-20241022
+      system_prompt: You are a helpful AI assistant with access to smart home devices.
+        When users ask to control devices, use the available functions to execute
+        their requests.
+      temperature: 0.7
+    gemini:
+      max_tokens: 4096
+      model: gemini-1.5-flash
+      system_prompt: You are a helpful AI assistant with access to smart home devices.
+        When users ask to control devices, use the available functions to execute
+        their requests.
+      temperature: 0.7
+    openai:
+      max_tokens: null
+      model: gpt-4o-mini
+      system_prompt: You are a helpful AI assistant with access to smart home devices.
+        When users ask to control devices, use the available functions to execute
+        their requests.
+      temperature: 0.7
+    openrouter:
+      max_tokens: 4096
+      model: anthropic/claude-3-sonnet
+      system_prompt: You are a helpful AI assistant with access to smart home devices.
+        When users ask to control devices, use the available functions to execute
+        their requests.
+      temperature: 0.7
+runtime:
+  config_reload_interval: 5
+  strict_mode: true

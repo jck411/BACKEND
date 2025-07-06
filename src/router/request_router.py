@@ -2,6 +2,7 @@
 Request router for orchestrating adapter communication.
 
 Added 2025-07-05: Core router implementation with simplified OpenAI adapter integration.
+Updated 2025-07-06: Multi-provider support with strict mode (no fallbacks).
 Following PROJECT_RULES.md:
 - Async I/O for all operations
 - Timeout handling with explicit errors
@@ -11,14 +12,32 @@ Following PROJECT_RULES.md:
 """
 
 import asyncio
-from typing import Any, AsyncGenerator, Dict
+import os
+from typing import AsyncGenerator, Dict
 
-from adapters.base import AdapterRequest
+from adapters.base import AdapterRequest, BaseAdapter
 from adapters.openai_adapter import OpenAIAdapter
 from common.config import Config
+from common.runtime_config import get_active_provider_config
 from common.logging import TimedLogger, get_logger
 from common.models import Chunk, ChunkType, WebSocketResponse
 from router.message_types import RequestType, RouterRequest
+
+# Import other adapters with fallback handling
+try:
+    from adapters.anthropic_adapter import AnthropicAdapter
+except ImportError:
+    AnthropicAdapter = None
+
+try:
+    from adapters.gemini_adapter import GeminiAdapter
+except ImportError:
+    GeminiAdapter = None
+
+try:
+    from adapters.openrouter_adapter import OpenRouterAdapter
+except ImportError:
+    OpenRouterAdapter = None
 
 logger = get_logger(__name__)
 
@@ -36,9 +55,9 @@ class RequestRouter:
 
     def __init__(self, config: Config):
         self.config = config
-        self.adapters: Dict[str, Any] = {}
+        self.adapters: Dict[str, BaseAdapter] = {}
 
-        # Initialize OpenAI adapter
+        # Initialize all available adapters
         self._initialize_adapters()
 
         logger.info(
@@ -46,24 +65,75 @@ class RequestRouter:
             message="Router initialized",
             timeout=config.router.request_timeout,
             max_retries=config.router.max_retries,
+            available_providers=list(self.adapters.keys()),
+            active_provider=config.providers.active,
         )
 
     def _initialize_adapters(self) -> None:
-        """Initialize all configured adapters."""
+        """Initialize all available adapters based on environment variables."""
+        # Note: These configurations are temporary and will move to MCP service later
+
         try:
             # Initialize OpenAI adapter
-            openai_config = {
-                "model": self.config.providers.openai_model,
-                "temperature": self.config.providers.openai_temperature,
-                "max_tokens": self.config.providers.openai_max_tokens,
-                "system_prompt": self.config.providers.openai_system_prompt,
-            }
-            self.adapters["openai"] = OpenAIAdapter(openai_config)
+            if os.getenv("OPENAI_API_KEY"):
+                openai_config = {
+                    "model": self.config.providers.openai_model,
+                    "temperature": self.config.providers.openai_temperature,
+                    "max_tokens": self.config.providers.openai_max_tokens,
+                    "system_prompt": self.config.providers.openai_system_prompt,
+                }
+                self.adapters["openai"] = OpenAIAdapter(openai_config)
+                logger.info(event="openai_adapter_loaded", message="OpenAI adapter initialized")
+
+            # Initialize Anthropic adapter
+            if os.getenv("ANTHROPIC_API_KEY") and AnthropicAdapter is not None:
+                anthropic_config = {
+                    "model": self.config.providers.anthropic_model,
+                    "temperature": self.config.providers.anthropic_temperature,
+                    "max_tokens": self.config.providers.anthropic_max_tokens,
+                    "system_prompt": self.config.providers.anthropic_system_prompt,
+                }
+                self.adapters["anthropic"] = AnthropicAdapter(anthropic_config)
+                logger.info(
+                    event="anthropic_adapter_loaded", message="Anthropic adapter initialized"
+                )
+
+            # Initialize Gemini adapter
+            if os.getenv("GEMINI_API_KEY") and GeminiAdapter is not None:
+                gemini_config = {
+                    "model": self.config.providers.gemini_model,
+                    "temperature": self.config.providers.gemini_temperature,
+                    "max_tokens": self.config.providers.gemini_max_tokens,
+                    "system_prompt": self.config.providers.gemini_system_prompt,
+                }
+                self.adapters["gemini"] = GeminiAdapter(gemini_config)
+                logger.info(event="gemini_adapter_loaded", message="Gemini adapter initialized")
+
+            # Initialize OpenRouter adapter
+            if os.getenv("OPENROUTER_API_KEY") and OpenRouterAdapter is not None:
+                openrouter_config = {
+                    "model": self.config.providers.openrouter_model,
+                    "temperature": self.config.providers.openrouter_temperature,
+                    "max_tokens": self.config.providers.openrouter_max_tokens,
+                    "system_prompt": self.config.providers.openrouter_system_prompt,
+                }
+                self.adapters["openrouter"] = OpenRouterAdapter(openrouter_config)
+                logger.info(
+                    event="openrouter_adapter_loaded", message="OpenRouter adapter initialized"
+                )
+
+            # Ensure we have at least one adapter available
+            if not self.adapters:
+                raise ValueError(
+                    "No AI providers available. Please set at least one API key: "
+                    "OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY"
+                )
 
             logger.info(
                 event="adapters_initialized",
                 message="Adapters initialized successfully",
                 adapters=list(self.adapters.keys()),
+                total_adapters=len(self.adapters),
             )
         except Exception as e:
             logger.error(
@@ -71,6 +141,52 @@ class RequestRouter:
                 message="Failed to initialize adapters",
                 error=str(e),
             )
+            raise
+
+    def _get_active_adapter(self) -> BaseAdapter:
+        """Get the active adapter based on runtime configuration (strict mode - no fallbacks)."""
+        # Get runtime config for active provider
+        runtime_config = get_active_provider_config()
+        active_provider = runtime_config["provider"]
+
+        # Strict mode: fail fast if provider not available
+        if active_provider not in self.adapters:
+            raise ValueError(
+                f"Active provider '{active_provider}' not available. "
+                f"Available providers: {list(self.adapters.keys())}. "
+                f"Check your API keys and runtime_config.yaml settings."
+            )
+
+        logger.info(
+            event="active_provider_selected",
+            message="Active provider selected",
+            provider=active_provider,
+            model=runtime_config["model"],
+        )
+
+        return self.adapters[active_provider]
+
+    async def health_check_all_providers(self) -> Dict[str, bool]:
+        """Check health of all configured providers."""
+        health_status = {}
+
+        for name, adapter in self.adapters.items():
+            try:
+                health_status[name] = await adapter.health_check()
+                logger.info(
+                    event="provider_health_check",
+                    provider=name,
+                    healthy=health_status[name],
+                )
+            except Exception as e:
+                logger.error(
+                    event="provider_health_check_failed",
+                    provider=name,
+                    error=str(e),
+                )
+                health_status[name] = False
+
+        return health_status
 
     async def process_request(
         self, router_request: RouterRequest
@@ -144,39 +260,56 @@ class RequestRouter:
 
         text_input = request.payload.get("text", "")
 
-        logger.info(
-            event="chat_request_start",
-            message="Processing chat request with OpenAI",
-            request_id=request.request_id,
-            input_length=len(text_input),
-        )
+        # Get active adapter with fallback logic
+        try:
+            active_adapter = self._get_active_adapter()
+            provider_name = self.config.providers.active
 
-        # Get OpenAI adapter
-        openai_adapter = self.adapters.get("openai")
-        if not openai_adapter:
-            logger.error(
-                event="openai_adapter_missing",
-                message="OpenAI adapter not available",
+            # Find the actual provider name being used
+            for name, adapter in self.adapters.items():
+                if adapter is active_adapter:
+                    provider_name = name
+                    break
+
+            logger.info(
+                event="chat_request_start",
+                message=f"Processing chat request with {provider_name}",
                 request_id=request.request_id,
+                input_length=len(text_input),
+                provider=provider_name,
+            )
+        except ValueError as e:
+            logger.error(
+                event="no_provider_available",
+                message="No AI provider available",
+                request_id=request.request_id,
+                error=str(e),
             )
             yield WebSocketResponse(
                 request_id=request.request_id,
                 status="error",
-                error="OpenAI adapter not available",
+                error=str(e),
             )
             return
 
         try:
-            # Prepare the adapter request
+            # Get runtime configuration for active provider
+            runtime_config = get_active_provider_config()
+
+            system_prompt = runtime_config["system_prompt"]
+            temperature = runtime_config["temperature"]
+            max_tokens = runtime_config["max_tokens"]
+            model_name = runtime_config["model"]
+
             adapter_request = AdapterRequest(
                 messages=[{"role": "user", "content": text_input}],
-                temperature=self.config.providers.openai_temperature,
-                max_tokens=self.config.providers.openai_max_tokens,
-                system_prompt=self.config.providers.openai_system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                system_prompt=system_prompt,
             )
 
             # Stream the response
-            async for adapter_response in openai_adapter.chat_completion(adapter_request):
+            async for adapter_response in active_adapter.chat_completion(adapter_request):  # type: ignore
                 # Handle content streaming
                 if adapter_response.content:
                     yield WebSocketResponse(
@@ -186,8 +319,8 @@ class RequestRouter:
                             type=ChunkType.TEXT,
                             data=adapter_response.content,
                             metadata={
-                                "source": "openai",
-                                "model": self.config.providers.openai_model,
+                                "source": provider_name,
+                                "model": model_name,
                                 **adapter_response.metadata,
                             },
                         ),
@@ -204,6 +337,7 @@ class RequestRouter:
                 event="chat_request_error",
                 message="Chat request processing failed",
                 request_id=request.request_id,
+                provider=provider_name,
                 error=str(e),
             )
             yield WebSocketResponse(
