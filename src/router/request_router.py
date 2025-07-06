@@ -1,17 +1,20 @@
 """
 Request router for orchestrating adapter communication.
 
-Added 2025-07-05: Core router implementation.
+Added 2025-07-05: Core router implementation with simplified OpenAI adapter integration.
 Following PROJECT_RULES.md:
 - Async I/O for all operations
 - Timeout handling with explicit errors
 - Structured logging with elapsed_ms
 - Single responsibility per class
+- Future-ready for MCP integration
 """
 
 import asyncio
 from typing import Any, AsyncGenerator, Dict
 
+from adapters.base import AdapterRequest
+from adapters.openai_adapter import OpenAIAdapter
 from common.config import Config
 from common.logging import TimedLogger, get_logger
 from common.models import Chunk, ChunkType, WebSocketResponse
@@ -33,7 +36,10 @@ class RequestRouter:
 
     def __init__(self, config: Config):
         self.config = config
-        self.adapters: Dict[str, Any] = {}  # Will hold adapter instances
+        self.adapters: Dict[str, Any] = {}
+
+        # Initialize OpenAI adapter
+        self._initialize_adapters()
 
         logger.info(
             event="router_initialized",
@@ -41,6 +47,30 @@ class RequestRouter:
             timeout=config.router.request_timeout,
             max_retries=config.router.max_retries,
         )
+
+    def _initialize_adapters(self) -> None:
+        """Initialize all configured adapters."""
+        try:
+            # Initialize OpenAI adapter
+            openai_config = {
+                "model": self.config.providers.openai_model,
+                "temperature": self.config.providers.openai_temperature,
+                "max_tokens": self.config.providers.openai_max_tokens,
+                "system_prompt": self.config.providers.openai_system_prompt,
+            }
+            self.adapters["openai"] = OpenAIAdapter(openai_config)
+
+            logger.info(
+                event="adapters_initialized",
+                message="Adapters initialized successfully",
+                adapters=list(self.adapters.keys()),
+            )
+        except Exception as e:
+            logger.error(
+                event="adapter_initialization_failed",
+                message="Failed to initialize adapters",
+                error=str(e),
+            )
 
     async def process_request(
         self, router_request: RouterRequest
@@ -110,68 +140,77 @@ class RequestRouter:
     async def _handle_chat_request(
         self, request: RouterRequest
     ) -> AsyncGenerator[WebSocketResponse, None]:
-        """Handle chat/text generation requests with potential device control via function calling."""
-
-        # For now, simulate AI response generation with function calling capability
-        # TODO: Route to actual AI adapter (OpenAI, Anthropic, etc.) with function calling
+        """Handle chat/text generation requests."""
 
         text_input = request.payload.get("text", "")
 
         logger.info(
             event="chat_request_start",
-            message="Processing chat request",
+            message="Processing chat request with OpenAI",
             request_id=request.request_id,
             input_length=len(text_input),
         )
 
-        # Check if request might involve device control
-        device_keywords = ["light", "turn on", "turn off", "device", "temperature", "thermostat"]
-        has_device_intent = any(keyword in text_input.lower() for keyword in device_keywords)
-
-        # Simulate streaming AI response with potential function calling
-        responses = [
-            "I understand you're asking about: ",
-            f'"{text_input[:50]}..." ',
-        ]
-
-        if has_device_intent:
-            responses.extend(
-                [
-                    "I detected a device control request. ",
-                    "Executing device function via LLM function calling... ",
-                    "✅ Device control completed successfully. ",
-                ]
+        # Get OpenAI adapter
+        openai_adapter = self.adapters.get("openai")
+        if not openai_adapter:
+            logger.error(
+                event="openai_adapter_missing",
+                message="OpenAI adapter not available",
+                request_id=request.request_id,
             )
-        else:
-            responses.extend(
-                [
-                    "This is a simulated chat response from the router. ",
-                    "In the future, this will connect to real AI adapters ",
-                    "with function calling capabilities for device control.",
-                ]
-            )
-
-        for i, response_text in enumerate(responses):
-            # Add artificial delay to simulate real AI streaming
-            await asyncio.sleep(0.2)
-
             yield WebSocketResponse(
                 request_id=request.request_id,
-                status="chunk",
-                chunk=Chunk(
-                    type=ChunkType.TEXT,
-                    data=response_text,
-                    metadata={
-                        "chunk_index": i,
-                        "total_chunks": len(responses),
-                        "source": "router_simulation",
-                        "has_function_call": has_device_intent and i >= 2,
-                    },
-                ),
+                status="error",
+                error="OpenAI adapter not available",
+            )
+            return
+
+        try:
+            # Prepare the adapter request
+            adapter_request = AdapterRequest(
+                messages=[{"role": "user", "content": text_input}],
+                temperature=self.config.providers.openai_temperature,
+                max_tokens=self.config.providers.openai_max_tokens,
+                system_prompt=self.config.providers.openai_system_prompt,
             )
 
-        # Send completion
-        yield WebSocketResponse(request_id=request.request_id, status="complete")
+            # Stream the response
+            async for adapter_response in openai_adapter.chat_completion(adapter_request):
+                # Handle content streaming
+                if adapter_response.content:
+                    yield WebSocketResponse(
+                        request_id=request.request_id,
+                        status="chunk",
+                        chunk=Chunk(
+                            type=ChunkType.TEXT,
+                            data=adapter_response.content,
+                            metadata={
+                                "source": "openai",
+                                "model": self.config.providers.openai_model,
+                                **adapter_response.metadata,
+                            },
+                        ),
+                    )
+
+                # Handle completion
+                if adapter_response.finish_reason:
+                    # Send completion
+                    yield WebSocketResponse(request_id=request.request_id, status="complete")
+                    break
+
+        except Exception as e:
+            logger.error(
+                event="chat_request_error",
+                message="Chat request processing failed",
+                request_id=request.request_id,
+                error=str(e),
+            )
+            yield WebSocketResponse(
+                request_id=request.request_id,
+                status="error",
+                error=f"Chat processing failed: {str(e)}",
+            )
 
     async def _handle_image_request(
         self, request: RouterRequest

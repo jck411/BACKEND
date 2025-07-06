@@ -1,63 +1,74 @@
 #!/usr/bin/env python3
 """
-Example WebSocket client for testing the gateway.
+Simple WebSocket client for testing real chat functionality.
 
-This is an example/demo file, not part of the main codebase.
-Added 2025-07-05: Manual test client for WebSocket functionality.
+Usage:
+    python examples/websocket_client.py
 """
 
 import asyncio
 import json
+import uuid
 
 import websockets  # type: ignore
 
 
-async def test_websocket():
-    """Test WebSocket connection and message handling."""
-    uri = "ws://127.0.0.1:8000/ws"
+async def test_simple_chat():
+    """Test basic chat functionality with OpenAI."""
+    uri = "ws://127.0.0.1:8000/ws/chat"
+
+    print(f"Connecting to {uri}...")
 
     try:
-        print(f"Connecting to {uri}...")
         async with websockets.connect(uri) as websocket:
-            # Receive welcome message
-            welcome = await websocket.recv()
-            print(f"Received welcome: {welcome}")
+            print("✅ Connected successfully!")
 
-            # Send a test message
-            test_message = {
+            # Wait for welcome message
+            welcome = await websocket.recv()
+            welcome_data = json.loads(welcome)
+            print(f"Welcome: {welcome_data.get('status', 'unknown')}")
+
+            # Test chat message
+            chat_message = {
                 "action": "chat",
-                "payload": {"text": "Hello from test client!"},
-                "request_id": "test-client-001",
+                "payload": {"text": "Hello! Please tell me a short joke."},
+                "request_id": str(uuid.uuid4())
             }
 
-            print(f"Sending message: {json.dumps(test_message, indent=2)}")
-            await websocket.send(json.dumps(test_message))
+            print(f"\n📤 Sending: {chat_message['payload']['text']}")
+            await websocket.send(json.dumps(chat_message))
 
-            # Receive responses
-            print("\nReceiving responses:")
-            while True:
+            print("📥 Receiving response:")
+            response_content = ""
+
+            async for message in websocket:
                 try:
-                    response = await asyncio.wait_for(websocket.recv(), timeout=5.0)
-                    data = json.loads(response)
-                    print(f"Status: {data['status']}")
+                    response = json.loads(message)
+                    status = response.get('status', 'unknown')
 
-                    if data.get("chunk"):
-                        print(f"Chunk: {data['chunk']['data']}")
+                    if status == 'chunk':
+                        chunk = response.get('chunk', {})
+                        if chunk.get('type') == 'text':
+                            content = chunk.get('data', '')
+                            response_content += content
+                            print(content, end='', flush=True)
 
-                    if data["status"] == "complete":
-                        print("Message processing complete!")
+                    elif status == 'complete':
+                        print("\n\n✅ Chat completed!")
+                        print(f"📊 Full response: {response_content}")
                         break
 
-                except asyncio.TimeoutError:
-                    print("Timeout waiting for response")
-                    break
-                except Exception as e:
-                    print(f"Error: {e}")
-                    break
+                    elif status == 'error':
+                        print(f"\n❌ Error: {response.get('error', 'Unknown error')}")
+                        break
+
+                except json.JSONDecodeError as e:
+                    print(f"❌ Failed to parse JSON: {e}")
+                    print(f"Raw message: {message}")
 
     except Exception as e:
-        print(f"Connection failed: {e}")
+        print(f"❌ Error: {e}")
 
 
 if __name__ == "__main__":
-    asyncio.run(test_websocket())
+    asyncio.run(test_simple_chat())

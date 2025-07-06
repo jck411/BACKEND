@@ -26,11 +26,11 @@ def router(test_config: Config) -> RequestRouter:
 
 @pytest.mark.asyncio
 async def test_chat_request_processing(router: RequestRouter) -> None:
-    """Test chat request processing with device detection."""
+    """Test basic chat request processing."""
     request = RouterRequest(
         request_id="test-123",
         request_type=RequestType.CHAT,
-        payload={"text": "Turn on the lights please"},
+        payload={"text": "Hello, how are you?"},
         connection_id="conn-456",
     )
 
@@ -44,13 +44,14 @@ async def test_chat_request_processing(router: RequestRouter) -> None:
     # Last response should be complete
     assert responses[-1].status == "complete"
 
-    # Should have text chunks
+    # Should have text chunks (actual OpenAI responses)
     text_chunks = [r for r in responses if r.chunk and r.chunk.type == ChunkType.TEXT]
     assert len(text_chunks) > 0
 
-    # Should detect device control intent
-    device_responses = [r for r in responses if r.chunk and "device" in r.chunk.data.lower()]
-    assert len(device_responses) > 0
+    # Should have content from OpenAI
+    content = "".join(chunk.chunk.data for chunk in text_chunks if chunk.chunk and chunk.chunk.data)
+    assert len(content) > 0
+    print(f"Received content: {content[:100]}...")  # Debug output
 
 
 @pytest.mark.asyncio

@@ -32,6 +32,24 @@ class RouterConfig(BaseModel):
     max_retries: int = Field(default=3, description="Maximum retry attempts")
 
 
+class ProviderConfig(BaseModel):
+    """Temporary configuration for AI providers (will move to MCP later)."""
+
+    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
+    openai_temperature: float = Field(default=0.7, description="OpenAI temperature setting")
+    openai_max_tokens: Optional[int] = Field(default=None, description="OpenAI max tokens limit")
+    openai_system_prompt: str = Field(
+        default="You are a helpful AI assistant with access to smart home devices. When users ask to control devices, use the available functions to execute their requests.",
+        description="System prompt for OpenAI",
+    )
+
+    anthropic_model: str = Field(
+        default="claude-3-5-sonnet-20241022", description="Anthropic model to use"
+    )
+    anthropic_temperature: float = Field(default=0.7, description="Anthropic temperature setting")
+    anthropic_max_tokens: int = Field(default=4096, description="Anthropic max tokens limit")
+
+
 class MCPConfig(BaseModel):
     """Configuration for the MCP service."""
 
@@ -44,6 +62,7 @@ class Config(BaseModel):
 
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     router: RouterConfig = Field(default_factory=RouterConfig)
+    providers: ProviderConfig = Field(default_factory=ProviderConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     log_level: str = Field(default="INFO", description="Logging level")
 
