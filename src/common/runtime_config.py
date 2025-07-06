@@ -203,6 +203,72 @@ class RuntimeConfigManager:
             )
             return False
 
+    async def update_parameter(
+        self, provider: str, model: str, param_name: str, value: Any
+    ) -> bool:
+        """
+        Update a specific parameter for a provider/model combination.
+        Used by MCP service for AI self-configuration.
+
+        Args:
+            provider: Provider name
+            model: Model name
+            param_name: Parameter to update (temperature, max_tokens, etc.)
+            value: New parameter value
+
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            config = self.load_runtime_config()
+
+            # Navigate to provider model config
+            provider_models = config.setdefault("provider", {}).setdefault("models", {})
+
+            if provider not in provider_models:
+                logger.error(
+                    event="invalid_provider_for_update",
+                    message="Provider not found in configuration",
+                    provider=provider,
+                    available=list(provider_models.keys()),
+                )
+                return False
+
+            model_config = provider_models[provider]
+
+            # Update the parameter
+            model_config[param_name] = value
+
+            # Write back to file
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                yaml.dump(config, f, default_flow_style=False, indent=2)
+
+            # Invalidate cache
+            self._cached_config = None
+
+            logger.info(
+                event="parameter_updated",
+                message="Parameter updated via MCP",
+                provider=provider,
+                model=model,
+                parameter=param_name,
+                value=value,
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                event="parameter_update_failed",
+                message="Failed to update parameter",
+                provider=provider,
+                model=model,
+                parameter=param_name,
+                value=value,
+                error=str(e),
+            )
+            return False
+
 
 # Global runtime config manager instance
 _runtime_config_manager = None

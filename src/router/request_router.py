@@ -3,6 +3,7 @@ Request router for orchestrating adapter communication.
 
 Added 2025-07-05: Core router implementation with simplified OpenAI adapter integration.
 Updated 2025-07-06: Multi-provider support with strict mode (no fallbacks).
+Updated 2025-07-07: MCP integration for self-configuration capabilities.
 Following PROJECT_RULES.md:
 - Async I/O for all operations
 - Timeout handling with explicit errors
@@ -18,10 +19,11 @@ from typing import AsyncGenerator, Dict
 from adapters.base import AdapterRequest, BaseAdapter
 from adapters.openai_adapter import OpenAIAdapter
 from common.config import Config
-from common.runtime_config import get_active_provider_config
+from common.runtime_config import get_active_provider_config, get_runtime_config_manager
 from common.logging import TimedLogger, get_logger
 from common.models import Chunk, ChunkType, WebSocketResponse
 from router.message_types import RequestType, RouterRequest
+from mcp.connection_manager import MCPConnectionManager
 
 # Import other adapters with fallback handling
 try:
@@ -57,16 +59,21 @@ class RequestRouter:
         self.config = config
         self.adapters: Dict[str, BaseAdapter] = {}
 
+        # Initialize runtime config manager and MCP
+        self.runtime_config_manager = get_runtime_config_manager()
+        self.mcp_manager = MCPConnectionManager(self.runtime_config_manager)
+
         # Initialize all available adapters
         self._initialize_adapters()
 
         logger.info(
             event="router_initialized",
-            message="Router initialized",
+            message="Router initialized with MCP support",
             timeout=config.router.request_timeout,
             max_retries=config.router.max_retries,
             available_providers=list(self.adapters.keys()),
             active_provider=config.providers.active,
+            mcp_capabilities=list(self.mcp_manager.capabilities.keys()),
         )
 
     def _initialize_adapters(self) -> None:
@@ -219,6 +226,9 @@ class RequestRouter:
                         yield response
                 elif router_request.request_type == RequestType.FRONTEND_COMMAND:
                     async for response in self._handle_frontend_command(router_request):
+                        yield response
+                elif router_request.request_type == RequestType.MCP_REQUEST:
+                    async for response in self._handle_mcp_request(router_request):
                         yield response
                 else:
                     # Unknown request type
@@ -460,6 +470,55 @@ class RequestRouter:
         )
 
         yield WebSocketResponse(request_id=request.request_id, status="complete")
+
+    async def _handle_mcp_request(
+        self, request: RouterRequest
+    ) -> AsyncGenerator[WebSocketResponse, None]:
+        """Handle Model Context Protocol requests for self-configuration."""
+
+        logger.info(
+            event="mcp_request_start",
+            message="Processing MCP request",
+            request_id=request.request_id,
+            payload_keys=list(request.payload.keys()),
+        )
+
+        try:
+            # Handle MCP request through the MCP manager
+            mcp_response = await self.mcp_manager.handle_mcp_request(request.payload)
+
+            # Send the MCP response as a chunk
+            yield WebSocketResponse(
+                request_id=request.request_id,
+                status="chunk",
+                chunk=Chunk(
+                    type=ChunkType.METADATA,
+                    data=mcp_response.get("result", mcp_response),
+                    metadata={
+                        "source": "mcp_service",
+                        "mcp_status": mcp_response.get("status", "unknown"),
+                        "capability_id": mcp_response.get("capability_id"),
+                        "mcp_type": mcp_response.get("type"),
+                        "mcp_action": mcp_response.get("action"),
+                    },
+                ),
+            )
+
+            # Send completion
+            yield WebSocketResponse(request_id=request.request_id, status="complete")
+
+        except Exception as e:
+            logger.error(
+                event="mcp_request_error",
+                message="MCP request processing failed",
+                request_id=request.request_id,
+                error=str(e),
+            )
+            yield WebSocketResponse(
+                request_id=request.request_id,
+                status="error",
+                error=f"MCP processing failed: {str(e)}",
+            )
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the router and cleanup resources."""

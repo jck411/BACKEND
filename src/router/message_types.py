@@ -19,6 +19,7 @@ class RequestType(str, Enum):
     IMAGE_GENERATION = "generate_image"  # Image generation requests
     AUDIO_STREAM = "audio_stream"  # TTS and audio generation
     FRONTEND_COMMAND = "frontend_command"  # UI updates and notifications
+    MCP_REQUEST = "mcp_request"  # Model Context Protocol requests for self-configuration
 
 
 class RouterRequest(BaseModel):

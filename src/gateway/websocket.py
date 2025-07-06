@@ -22,6 +22,7 @@ from common.models import WebSocketMessage, WebSocketResponse
 from gateway.connection_manager import ConnectionManager
 from router.message_types import RequestType, RouterRequest
 from router.request_router import RequestRouter
+from mcp.mcp_server import get_mcp_server
 
 logger = get_logger(__name__)
 
@@ -37,6 +38,9 @@ class WebSocketGateway:
         # self.media_handler = MediaHandler(max_file_size=config.gateway.max_upload_size)
         self.router = RequestRouter(config)
 
+        # Initialize MCP server
+        self.mcp_server = get_mcp_server()
+
         # Setup routes
         self._setup_routes()
 
@@ -46,10 +50,12 @@ class WebSocketGateway:
         @self.app.get("/health")
         async def health_check():
             """Health check endpoint."""
+            mcp_health = await self.mcp_server.health_check()
             return JSONResponse(
                 {
                     "status": "healthy",
                     "active_connections": self.connection_manager.get_connection_count(),
+                    "mcp_server": mcp_health,
                 }
             )
 
@@ -57,6 +63,9 @@ class WebSocketGateway:
         async def websocket_endpoint(websocket: WebSocket):
             """Main WebSocket endpoint."""
             await self._handle_websocket_connection(websocket)
+
+        # Include MCP server routes
+        self.app.include_router(self.mcp_server.get_router())
 
     async def _handle_websocket_connection(self, websocket: WebSocket) -> None:
         """Handle a new WebSocket connection."""
