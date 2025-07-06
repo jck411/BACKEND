@@ -1,89 +1,189 @@
-Project Overview
+# Project Overview
 
-This document provides a high-level overview of the backend project, explaining its purpose, main components, folder structure, and how to get started.
+This document provides a comprehensive overview of the backend project, explaining its purpose, architecture, current implementation status, and planned features.
 
-1. Purpose
+## 1. Purpose
 
 The backend project implements a flexible, LAN-only backend that:
 
-Streams AI-generated text or images to multiple client UIs (e.g., Kivy, PySide, web) over WebSockets.
+- Streams AI-generated text or images to multiple client UIs (e.g., Kivy, PySide, web) over WebSockets.
+- Centralizes all model and device settings in a single MCP (Model-Context Protocol) service, so inference parameters and home-automation commands are managed in one place.
+- Supports multiple inference providers (OpenAI, Anthropic, local LLM) and home-automation via Zigbee, with clean separation between components.
 
-Centralizes all model and device settings in a single MCP (Model-Context Protocol) service, so inference parameters and home-automation commands are managed in one place.
+## 2. Features
 
-Supports multiple inference providers (OpenAI, Anthropic, local LLM) and home-automation via Zigbee, with clean separation between components.
+### Current Implementation (v0.1 - Working Base)
+- ✅ **WebSocket Gateway**: FastAPI-based streaming gateway with connection management
+- ✅ **Request Router**: Request orchestration with timeout handling and response streaming
+- ✅ **Structured Logging**: JSON logs with performance metrics and timing information
+- ✅ **Type Safety**: Pydantic models with comprehensive validation
+- ✅ **Automation Tools**: Pre-commit hooks, linting, testing infrastructure
+- ✅ **Configuration Management**: YAML-based config with environment variable overrides
+- ✅ **Examples & Testing**: WebSocket test clients and action examples
 
-2. High-Level Architecture
+### Planned Features (Future Versions)
+- 🔄 **Central MCP Service**: User profiles, model configurations, chat history, device definitions
+- 🔄 **AI Provider Adapters**: OpenAI, Anthropic, local LLM integrations with function calling
+- 🔄 **Home Automation**: Zigbee device control via MQTT/Zigbee2MQTT
+- 🔄 **MCP Aggregation**: Proxy/aggregate 100s of external MCP servers with conflict resolution
+- 🔄 **Hot Configuration**: Redis Pub/Sub for real-time config updates without restarts
+- 🔄 **Authentication**: User management and WebSocket authentication
+- 🔄 **TTS/Audio**: Text-to-speech and audio streaming capabilities
 
+## 3. Current Status (Updated 2025-07-05)
+
+### ✅ Successfully Implemented Components
+
+**Core Architecture:**
+- FastAPI WebSocket gateway with connection lifecycle management
+- Request router with timeout handling and adapter orchestration framework
+- Structured JSON logging with performance timing (`TimedLogger`)
+- Type-safe message validation using Pydantic models
+
+**Data Models:**
+- `Chunk` - Streaming content structure (text, images, metadata)
+- `WebSocketMessage` - Client-to-server message format
+- `WebSocketResponse` - Server-to-client response format
+- Request/response types for different action categories
+
+**Configuration System:**
+- YAML-based configuration with environment variable overrides
+- Separate configs for Gateway, Router, and MCP components
+- Security-compliant (no secrets in config files)
+
+**Infrastructure:**
+- Pre-commit hooks with Ruff and Black
+- Pytest test suite with async support
+- Scripts for linting and server startup
+- Example clients for manual testing
+
+### 🔄 Architecture Ready for Extension
+
+**Empty but Structured Directories:**
+- `src/adapters/` - Framework ready for AI and device adapters
+- `src/mcp/` - Architecture planned for Model-Context Protocol service
+
+**Planned Integration Points:**
+- Router → Adapter communication framework
+- MCP service integration patterns
+- Redis Pub/Sub configuration updates
+- gRPC streaming for distributed services
+
+### 📊 Testing Status
+
+**Manual Testing Results:**
+- ✅ Health endpoint: `GET /health` returns connection status
+- ✅ WebSocket endpoint: `ws://127.0.0.1:8000/ws/chat` accepts connections
+- ✅ Message processing: Handles chat, image, audio, frontend_command actions
+- ✅ Error handling: Graceful handling of invalid messages and timeouts
+- ✅ Connection management: Proper connection lifecycle with structured logging
+
+**Example Test Output:**
+```
+Connecting to ws://127.0.0.1:8000/ws/chat...
+Received welcome: {"request_id":"welcome","status":"complete",...}
+Sending message: {"action": "chat", "payload": {"text": "Hello!"}, ...}
+Receiving responses:
+Status: processing → chunk → chunk → chunk → complete
+```
+
+### 🏗️ Architecture Compliance
+
+✅ **Async/Event-Driven**: All I/O operations use async/await
+✅ **Timeout Handling**: Configurable timeouts with graceful degradation
+✅ **Structured Logging**: JSON logs with timing and context information
+✅ **Single Responsibility**: Each module has focused, well-defined purpose
+✅ **Type Safety**: Comprehensive type hints and Pydantic validation
+✅ **Error Handling**: Graceful error recovery with proper logging
+
+## 4. High-Level Architecture
+                       │            │
+## 4. High-Level Architecture
+
+```
 Client UIs  ─── WebSocket ──▶ Gateway ──▶ Router ──▶ Adapters ──▶ Providers/Zigbee
                        │            │
                        │            └──▶ MCP (config & profiles)
                        ▼
                    Logging
                    Metrics
+```
 
-Gateway: Accepts client connections, handles authentication, and frames WebSocket messages.
+**Gateway**: Accepts client connections, handles authentication, and frames WebSocket messages.
 
-Router: Directs requests by fetching the correct settings from MCP, choosing the right adapter, and streaming results back to the client, including timeout and fallback logic.
+**Router**: Directs requests by fetching the correct settings from MCP, choosing the right adapter, and streaming results back to the client, including timeout and fallback logic.
 
-Adapters: One per external system, translating between internal requests and provider APIs or device commands.
+**Adapters**: One per external system, translating between internal requests and provider APIs or device commands.
 
-MCP: Single source of truth for model parameters, user profiles, device definitions, and chat history.
+**MCP**: Single source of truth for model parameters, user profiles, device definitions, and chat history.
 
-Providers/Zigbee: The actual AI services (e.g., OpenAI) and home-automation hub that carry out inference or device control.
+**Providers/Zigbee**: The actual AI services (e.g., OpenAI) and home-automation hub that carry out inference or device control.
 
-3. Folder Structure
+## 5. Project Structure
 
-backend/
+BACKEND/
 ├── README.md         # Quickstart and overview
+├── PROJECT_OVERVIEW.md # This document
+├── PROJECT_RULES.md  # Development standards and engineering rules
+├── STATUS.md         # Current implementation status
 ├── pyproject.toml    # Dependencies and tooling config
+├── uv.lock          # Locked dependencies for reproducible builds
 ├── .env.example      # Environment variables template
 ├── config.yaml       # Single configuration for all components
 │
 ├── src/              # Main application code
-│   ├── gateway/      # WebSocket endpoint and auth
-│   ├── router/       # Orchestrator logic
-│   ├── adapters/     # Plugins for AI providers and Zigbee
-│   ├── mcp/          # Model-Context Protocol service
-│   └── common/       # Shared types, utilities, and settings loader
+│   ├── main.py       # Application entry point
+│   ├── gateway/      # WebSocket endpoint and connection management
+│   ├── router/       # Request orchestration and adapter coordination
+│   ├── adapters/     # Plugins for AI providers and Zigbee (empty, planned)
+│   ├── mcp/          # Model-Context Protocol service (empty, planned)
+│   └── common/       # Shared types, utilities, config loader, and logging
 │
 ├── tests/            # Unit and integration tests
+├── examples/         # Test clients and action examples
 └── scripts/          # Helper scripts (lint, start)
 
-4. Key Components
+## 6. Key Components
 
-config.yaml: Holds all settings (database path, API keys, default model parameters).
+config.yaml: Holds all settings (gateway host/port, timeouts, logging configuration).
 
-gateway/: Implements FastAPI WebSocket route; validates incoming frames and sends outgoing chunks.
+gateway/: Implements FastAPI WebSocket route with connection management; validates incoming frames and sends outgoing chunks. Currently includes `websocket.py` (FastAPI app) and `connection_manager.py` (WebSocket lifecycle management).
 
-router/: Core logic for fetching MCP profiles, invoking adapters, and managing streams and error handling.
+router/: Core logic for request orchestration, timeout handling, and streaming responses. Currently includes `request_router.py` (main orchestrator) and `message_types.py` (request/response models). **Note**: MCP integration and adapter coordination will be added when those services are implemented.
 
-adapters/: Modules (openai_adapter.py, anthropic_adapter.py, local_llm_adapter.py, zigbee_adapter.py) that interface with each external system.
+adapters/: **Planned directory** for modules (openai_adapter.py, anthropic_adapter.py, local_llm_adapter.py, zigbee_adapter.py) that will interface with each external system. Currently empty.
 
-mcp/: Model-Context Protocol service following the latest MCP specification (see docs/mcp_spec.md or official documentation). Uses SQLite initially to store CRUD operations on model profiles, user and device settings, and chat history, and broadcasts updates via pub/sub.
+mcp/: **Planned directory** for Model-Context Protocol service following the latest MCP specification. Will use SQLite initially to store CRUD operations on model profiles, user and device settings, and chat history, and broadcast updates via pub/sub. Currently empty.
 
-  • Aggregator: Can proxy/aggregate 100s of external MCP servers (e.g., context7, memorybank), with ON/OFF toggles and static config in config.yaml. Broadcasts updates from external MCPs. Conflict resolution/schema is LLM-driven. Enables large-scale, flexible context/memory scenarios.
+  • Aggregator: **Planned feature** to proxy/aggregate 100s of external MCP servers (e.g., context7, memorybank), with ON/OFF toggles and static config in config.yaml. Will broadcast updates from external MCPs with LLM-driven conflict resolution/schema handling.
 
-common/: Houses Pydantic models (e.g., Chunk), logging setup, and the loader that reads config.yaml and .env.: Houses Pydantic models (e.g., Chunk), logging setup, and the loader that reads config.yaml and .env.
+common/: Houses Pydantic models (WebSocketResponse, Chunk, etc.), structured logging setup with TimedLogger, and the configuration loader that reads config.yaml and environment variables.
 
-tests/: Organized to mirror src/, using pytest and pytest-asyncio for async components.
+tests/: Organized to mirror src/, using pytest and pytest-asyncio for async components. Includes unit tests for config, models, gateway, and router components.
 
-scripts/: lint.sh to run Ruff & Black, start_dev.sh to launch all components locally.
+scripts/: `lint.sh` to run Ruff & Black, `start_dev.sh` to launch the application locally.
 
-5. Communication Protocols & Connections
+examples/: Contains `websocket_client.py` for testing WebSocket connections and `test_router_actions.py` for testing different action types.
 
-Client ↔ Gateway: Uses WebSockets for persistent, bidirectional streaming of text tokens or image bytes between UI and server.
+## 7. Communication Protocols & Connections
 
-Gateway ↔ Router: In a single-process setup, this can be direct function calls; for distributed services, use gRPC (HTTP/2 + Protobuf) to enforce schemas and enable low-latency streaming.
+## 7. Communication Protocols & Connections
 
-Router ↔ Adapters: Communicates over gRPC streams, converting internal request objects into provider-specific API streams and back.
+### Current Implementation
+**Client ↔ Gateway**: WebSockets for persistent, bidirectional streaming of text tokens or image bytes between UI and server.
 
-Router ↔ MCP: Fetches and updates profiles via RESTful HTTP/JSON (or gRPC for stricter contracts), keeping configuration human-readable and easy to debug.
+**Gateway ↔ Router**: Direct function calls in single-process setup; designed for future gRPC distribution.
 
-MCP Updates → Router: Uses a lightweight Redis Pub/Sub channel so routers hot-reload parameter changes without restarts.
+### Planned Protocols
+**Router ↔ Adapters**: gRPC streams for converting internal request objects into provider-specific API streams and back.
 
-Adapters → Devices: For home-automation commands, uses MQTT over TCP (via Zigbee2MQTT) at defined QoS levels to ensure reliable delivery.
+**Router ↔ MCP**: RESTful HTTP/JSON (or gRPC for stricter contracts), keeping configuration human-readable and easy to debug.
 
-6. Current Working Implementation (Added 2025-07-05)
+**MCP Updates → Router**: Redis Pub/Sub channel for hot-reloading parameter changes without restarts.
+
+**Adapters → Devices**: MQTT over TCP (via Zigbee2MQTT) at defined QoS levels for reliable home-automation delivery.
+
+## 8. Current Working Implementation & Message Flow
 
 The system now has a working bare-bones implementation with Router integration:
 
@@ -164,10 +264,58 @@ ws.send(JSON.stringify({
 - Frontend receives display commands and notifications, handles UI/UX
 - Clear separation of concerns: backend for intelligence, frontend for presentation
 
-**Next Steps:**
-- MCP service for user/model profile management
-- Real AI adapters (OpenAI, Anthropic, local LLM) with function calling capabilities
-- Zigbee adapter for backend device control execution
-- TTS/audio generation adapters for voice synthesis
-- Authentication and user management
-- Frontend client updates to use proper backend protocol
+## 9. Next Implementation Steps
+
+### Immediate Priorities
+1. **MCP Service Implementation**
+   - SQLite backend for user profiles and model configurations
+   - RESTful API for configuration management
+   - Pub/Sub integration for real-time updates
+
+2. **AI Provider Adapters**
+   - OpenAI adapter with function calling capabilities
+   - Anthropic adapter for Claude integration
+   - Local LLM adapter for self-hosted models
+
+3. **Home Automation Integration**
+   - Zigbee adapter for device control via MQTT
+   - Device definition and state management
+   - Safety controls and command validation
+
+### Medium-term Goals
+4. **Authentication & Authorization**
+   - User management system
+   - WebSocket authentication
+   - Role-based access control
+
+5. **MCP Aggregation Service**
+   - External MCP server proxy/aggregation
+   - Conflict resolution with LLM assistance
+   - Dynamic ON/OFF toggles for external services
+
+6. **Audio & TTS Integration**
+   - Text-to-speech adapter implementation
+   - Audio streaming optimization
+   - Voice configuration management
+
+## 10. Engineering Standards & Rules
+
+### Implementation Principles
+- **Pin interpreter version**: Never mix Python versions across environments
+- **Dependency management**: Use `uv add` for dependencies; always commit lockfile
+- **Async design**: Event-driven architecture; never block main thread
+- **Single responsibility**: One purpose per file/class; avoid god classes
+- **Security**: Never commit secrets; read from environment variables
+- **Testing**: ≥ 40% test coverage on critical logic; lint/type-check in CI
+- **Logging**: Structured JSON logs; no metrics endpoints in application
+- **Performance**: Optimize only after profiling; set realistic SLOs
+- **Error handling**: Fail fast on invalid input; catch broad exceptions only at process boundaries
+
+### Code Quality Standards
+- **Linting**: Ruff for fast Python linting
+- **Formatting**: Black for consistent code style
+- **Type checking**: mypy for static type analysis
+- **Testing**: pytest with pytest-asyncio for async components
+- **Pre-commit**: Automated quality checks before commits
+
+For complete implementation guidelines, see [`PROJECT_RULES.md`](PROJECT_RULES.md).

@@ -1,65 +1,78 @@
 
 # Backend Project
 
-> Flexible, LAN-only backend for streaming AI-generated text/images to multiple client UIs, centralizing all model/device settings, and supporting multiple inference providers and home automation. See `PROJECT_OVERVIEW.md` for full architecture and details.
+> Flexible, LAN-on## Commands
 
-## Features
-- WebSocket streaming to UIs (Web, Kivy, PySide)
-- Central MCP service (profiles, config, chat, devices)
-- Multiple AI providers (OpenAI, Anthropic, local LLMs)
-- Zigbee home automation (via adapters)
-- Aggregator: proxy/aggregate 100s of external MCP servers (ON/OFF, static config)
-- Hot-reload config via Redis Pub/Sub
+```bash
+# Code quality
+./scripts/lint.sh              # Run linting and formatting
+uv run -m pytest               # Run test suite
+uv run -m pytest --cov=src     # Run tests with coverage
 
-## Quickstart
-1. Pin Python version (see `pyproject.toml`).
-2. Install dependencies (from lockfile):
-   ```bash
-   uv sync --strict
-   ```
-3. Copy and edit config:
-   ```bash
-   cp .env.example .env
-   # Edit config.yaml as needed
-   ```
-4. Start the server:
-   ```bash
-   uv run python src/main.py
-   # OR use the development script:
-   # ./scripts/start_dev.sh
-   ```
-5. Run linting and tests:
-   ```bash
-   ./scripts/lint.sh
-   uv run -m pytest
-   ```
+# Dependencies
+uv add package-name             # Add new dependency
+uv sync --strict                # Sync from lockfile
 
-## Project Structure
-- `src/gateway/`   – WebSocket endpoint, auth
-- `src/router/`    – Orchestrator logic
-- `src/adapters/`  – AI provider & Zigbee plugins
-- `src/mcp/`       – Model-Context Protocol service & aggregator
-- `src/common/`    – Shared types, config loader, logging
-- `tests/`         – Unit/integration tests (pytest, pytest-asyncio)
-- `scripts/`       – Linting, dev start scripts
+# Server endpoints
+curl http://127.0.0.1:8000/health                    # Health check
+wscat -c ws://127.0.0.1:8000/ws/chat                 # WebSocket test
+```treaming AI-generated content to multiple client UIs over WebSockets. See [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) for full architecture, features, and implementation details.
 
-## Communication Protocols
-- Client ↔ Gateway: WebSockets
-- Gateway ↔ Router: Direct calls or gRPC
-- Router ↔ Adapters: gRPC streams
-- Router ↔ MCP: REST/JSON or gRPC
-- MCP Updates → Router: Redis Pub/Sub
-- Adapters → Devices: MQTT (Zigbee2MQTT)
+## Current Status
+✅ **Working WebSocket Gateway** with request routing, connection management, and structured logging
+🔄 **Planned**: MCP service, AI adapters, home automation, aggregation features
 
-## Engineering Rules (Summary)
-- Pin interpreter version; never mix versions
-- Add dependencies with `uv add`; always commit lockfile
-- Use async/event-driven design; never block main thread
-- Single responsibility per file; avoid god classes
-- Never commit secrets; read from environment
-- ≥ 40% test coverage on critical logic; lint/type-check in CI
-- Structured JSON logs; no metrics endpoints
-- Optimise only after profiling; set realistic SLOs
-- Fail fast on invalid input; catch broad exceptions only at process boundaries
+## Quick Start
 
-See `PROJECT_RULES.md` for full rules and development standards.
+### 1. Setup Environment
+```bash
+# Install dependencies
+uv sync --strict
+
+# Copy environment template (optional)
+cp .env.example .env
+```
+
+### 2. Start Server
+```bash
+# Start server
+uv run python src/main.py
+
+# Or use script
+./scripts/start_dev.sh
+```
+
+### 3. Test Connection
+```bash
+# Use included test client
+uv run python examples/websocket_client.py
+
+# Or test actions
+uv run python examples/test_router_actions.py
+```
+
+## Development Commands
+
+```bash
+# Code quality
+./scripts/lint.sh              # Run linting and formatting
+uv run -m pytest               # Run test suite
+uv run -m pytest --cov=src     # Run tests with coverage
+
+# Dependencies
+uv add package-name             # Add new dependency
+uv sync --strict                # Sync from lockfile
+
+# Server endpoints
+curl http://127.0.0.1:8000/health                    # Health check
+wscat -c ws://127.0.0.1:8000/ws/chat                 # WebSocket test
+```
+
+## Configuration
+
+- **`config.yaml`** - Main configuration (host, port, timeouts)
+- **`.env`** - Environment variables (optional overrides)
+- **Server**: `http://127.0.0.1:8000`
+- **WebSocket**: `ws://127.0.0.1:8000/ws/chat`
+
+For detailed architecture, communication protocols, and implementation guidelines, see [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md).
