@@ -13,10 +13,9 @@ Usage:
 """
 
 import asyncio
-import json
 import sys
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 import httpx
 
@@ -45,7 +44,7 @@ class ExternalMCPClient:
         This is how external clients discover what tools are available.
         """
         try:
-            response = await self.client.get(f"{self.server_url}/tools/list")
+            response = await self.client.post(f"{self.server_url}/tools/list", json={})
             response.raise_for_status()
 
             tools_data = response.json()
@@ -180,7 +179,7 @@ async def simulate_external_client_workflow():
         print(f"   Capabilities: {', '.join(discovery['capabilities'])}")
 
         # 2. Schema Introspection
-        print(f"\n2. 📋 Tool Schema Introspection")
+        print("\n2. 📋 Tool Schema Introspection")
         print("-" * 50)
 
         for tool_name in discovery['tool_names']:
@@ -199,7 +198,7 @@ async def simulate_external_client_workflow():
                     print(f"     • {param_name} ({param_info['type']}, {required})")
 
         # 3. Tool Execution Scenarios
-        print(f"\n3. 🚀 Tool Execution Scenarios")
+        print("\n3. 🚀 Tool Execution Scenarios")
         print("-" * 50)
 
         execution_scenarios = [
@@ -280,7 +279,7 @@ async def simulate_external_client_workflow():
             await asyncio.sleep(0.3)  # Brief pause between requests
 
         # 4. Error Handling Demonstration
-        print(f"\n4. 🛡️  Error Handling & Validation")
+        print("\n4. 🛡️  Error Handling & Validation")
         print("-" * 50)
 
         error_scenarios = [
@@ -309,13 +308,13 @@ async def simulate_external_client_workflow():
                 error_msg = result.get('content', [{}])[0].get('text') if result.get('content') else result.get('error')
                 print(f"  ✅ Correctly handled: {error_msg}")
             else:
-                print(f"  ⚠️  Expected error but got success")
+                print("  ⚠️  Expected error but got success")
 
         # 5. Summary
-        print(f"\n🎉 External MCP Client Integration Complete!")
+        print("\n🎉 External MCP Client Integration Complete!")
         print("=" * 70)
         print("✅ Standard MCP Protocol Compliance:")
-        print("   • GET /tools/list - Tool discovery working")
+        print("   • POST /tools/list - Tool discovery working")
         print("   • POST /tools/call - Tool execution working")
         print("   • Parameter validation working")
         print("   • Error handling working")

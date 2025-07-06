@@ -2,10 +2,10 @@
 Standard MCP HTTP Server Implementation
 
 This module implements the standard Model Context Protocol (MCP) HTTP endpoints
-following the official MCP specification for tool discovery and execution.
+following the official MCP 2025 specification for tool discovery and execution.
 
 Standard Endpoints:
-- GET /tools/list - Discover available tools/capabilities
+- POST /tools/list - Discover available tools/capabilities (MCP 2025 spec)
 - POST /tools/call - Execute a specific tool with parameters
 
 This provides vendor-agnostic runtime discovery that works with any MCP client.
@@ -70,12 +70,13 @@ class MCPServer:
     def _setup_routes(self) -> None:
         """Setup standard MCP routes."""
 
-        @self.router.get("/list", response_model=MCPToolListResponse)
+        @self.router.post("/list", response_model=MCPToolListResponse)
         async def list_tools() -> MCPToolListResponse:
             """
             Standard MCP endpoint for tool discovery.
 
             Returns all available tools with their schemas and descriptions.
+            Note: MCP 2025 specification requires POST for /tools/list
             """
             try:
                 tools = await self.tool_registry.list_tools()
