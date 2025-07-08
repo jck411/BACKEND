@@ -146,50 +146,52 @@ async def startup_health_checks(config) -> None:
     )
 
 
-async def async_main() -> None:
-    """Async main entry point for startup checks."""
-    # Parse arguments
-    args = parse_args()
-
-    # Load configuration
-    config = load_config()
-
-    # Setup logging
-    setup_logging(config)
-
+async def run_startup_checks(config) -> None:
+    """Run async startup checks."""
     logger.info(
         event="application_starting",
         version="MCP 2025 Gateway",
-        host=args.host or config.gateway.host,
-        port=args.port or config.gateway.port,
+        host=config.gateway.host,
+        port=config.gateway.port,
     )
 
     # Perform startup health checks (fail-fast)
     await startup_health_checks(config)
 
-    # Create FastAPI app (only after health checks pass)
-    app = create_gateway_app(config)
-
-    # Run with uvicorn (use command-line args if provided)
-    host = args.host or config.gateway.host
-    port = args.port or config.gateway.port
-
-    logger.info(event="starting_server", host=host, port=port)
-
-    # Note: uvicorn.run is synchronous, so we start it here
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_config=None,  # Use our custom logging setup
-        access_log=False,  # Disable default access logs
-    )
-
 
 def main() -> None:
-    """Main entry point - runs async main."""
+    """Main entry point."""
     try:
-        asyncio.run(async_main())
+        # Parse arguments
+        args = parse_args()
+
+        # Load configuration
+        config = load_config()
+
+        # Setup logging
+        setup_logging(config)
+
+        # Run async startup checks
+        asyncio.run(run_startup_checks(config))
+
+        # Create FastAPI app (only after health checks pass)
+        app = create_gateway_app(config)
+
+        # Run with uvicorn (use command-line args if provided)
+        host = args.host or config.gateway.host
+        port = args.port or config.gateway.port
+
+        logger.info(event="starting_server", host=host, port=port)
+
+        # Run uvicorn synchronously (it creates its own event loop)
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            log_config=None,  # Use our custom logging setup
+            access_log=False,  # Disable default access logs
+        )
+
     except KeyboardInterrupt:
         logger.info(event="application_shutdown", reason="Keyboard interrupt")
     except SystemExit as e:
