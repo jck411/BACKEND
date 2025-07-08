@@ -1,59 +1,31 @@
 """
-Runtime configuration management for AI providers.
+Runtime configuration file persistence for MCP server.
 
-This module handles runtime-configurable settings that can be changed
-without restarting the application. In the future, this will integrate
-with frontend commands for dynamic provider switching.
+This module is now a simple file helper that reads/writes configuration
+for the MCP 2025 server, which is the single source of truth.
 
 Following PROJECT_RULES.md:
-- Single responsibility: Runtime configuration management
-- Future-ready for MCP integration
-- Environment variables only for secrets (API keys)
-- Configuration files for runtime settings
+- Single responsibility: File persistence only
+- MCP server handles all configuration logic
+- No caching or state management here
 """
 
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from pydantic import BaseModel, Field
 
 from common.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class ModelConfig(BaseModel):
-    """Configuration for a specific AI model."""
-
-    model: str = Field(description="Model identifier")
-    temperature: float = Field(default=0.7, description="Temperature setting")
-    max_tokens: Optional[int] = Field(default=None, description="Max tokens limit")
-    system_prompt: str = Field(description="System prompt for the model")
-
-
-class RuntimeProviderConfig(BaseModel):
-    """Runtime configuration for AI provider selection."""
-
-    active: str = Field(description="Active provider")
-    models: Dict[str, ModelConfig] = Field(description="Model configurations")
-
-
-class RuntimeConfig(BaseModel):
-    """Runtime behavior settings."""
-
-    strict_mode: bool = Field(default=True, description="Strict mode - no fallbacks")
-    config_reload_interval: int = Field(default=5, description="Config reload interval in seconds")
-
-
-class RuntimeConfigManager:
-    """Manages runtime configuration with automatic reloading."""
+class RuntimeConfigPersistence:
+    """Simple file persistence for MCP server configuration."""
 
     def __init__(self, config_path: Optional[Path] = None):
-        """Initialize runtime config manager."""
+        """Initialize runtime config persistence."""
         self.config_path = config_path or Path("runtime_config.yaml")
-        self.last_modified = 0.0
-        self._cached_config = None
 
         # Ensure config file exists with defaults
         self._ensure_config_file()
@@ -100,198 +72,70 @@ class RuntimeConfigManager:
                 "runtime": {"strict_mode": True, "config_reload_interval": 5},
             }
 
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                yaml.dump(default_config, f, default_flow_style=False, indent=2)
+            self.save_config(default_config)
 
-    def _should_reload(self) -> bool:
-        """Check if config file has been modified."""
-        if not self.config_path.exists():
-            return False
+    def load_config(self) -> Dict[str, Any]:
+        """
+        Load configuration from file.
 
-        current_modified = self.config_path.stat().st_mtime
-        if current_modified > self.last_modified:
-            self.last_modified = current_modified
-            return True
-        return False
-
-    def load_runtime_config(self) -> Dict[str, Any]:
-        """Load runtime configuration with automatic reloading."""
-        if self._cached_config is None or self._should_reload():
+        Returns:
+            Configuration dictionary
+        """
+        try:
             with open(self.config_path, "r", encoding="utf-8") as f:
-                self._cached_config = yaml.safe_load(f) or {}
+                config = yaml.safe_load(f) or {}
 
-            logger.info(
-                event="runtime_config_loaded",
-                message="Runtime configuration loaded",
-                active_provider=self._cached_config.get("provider", {}).get("active"),
-                strict_mode=self._cached_config.get("runtime", {}).get("strict_mode", True),
+            logger.debug(
+                event="config_loaded",
+                message="Configuration loaded from file",
+                path=str(self.config_path),
             )
 
-        return self._cached_config
+            return config
 
-    def get_active_provider_config(self) -> Dict[str, Any]:
-        """Get configuration for the currently active provider."""
-        config = self.load_runtime_config()
-        provider_config = config.get("provider", {})
-        active_provider = provider_config.get("active", "openai")
+        except Exception as e:
+            logger.error(
+                event="config_load_failed", message="Failed to load configuration", error=str(e)
+            )
+            # Return empty config on error
+            return {}
 
-        # Get model config for active provider
-        models = provider_config.get("models", {})
-        active_model_config = models.get(active_provider, {})
-
-        return {
-            "provider": active_provider,
-            "model": active_model_config.get("model", "gpt-4o-mini"),
-            "temperature": active_model_config.get("temperature", 0.7),
-            "max_tokens": active_model_config.get("max_tokens"),
-            "system_prompt": active_model_config.get(
-                "system_prompt", "You are a helpful AI assistant."
-            ),
-        }
-
-    def is_strict_mode(self) -> bool:
-        """Check if strict mode is enabled (no fallbacks)."""
-        config = self.load_runtime_config()
-        return config.get("runtime", {}).get("strict_mode", True)
-
-    def update_active_provider(self, provider: str) -> bool:
+    def save_config(self, config: Dict[str, Any]) -> bool:
         """
-        Update active provider in runtime config.
+        Save configuration to file.
 
         Args:
-            provider: Provider name (openai|anthropic|gemini|openrouter)
+            config: Configuration dictionary to save
 
         Returns:
-            True if update successful, False otherwise
+            True if successful, False otherwise
         """
         try:
-            config = self.load_runtime_config()
-
-            # Validate provider exists in models
-            available_providers = config.get("provider", {}).get("models", {}).keys()
-            if provider not in available_providers:
-                logger.error(
-                    event="invalid_provider",
-                    message="Invalid provider specified",
-                    provider=provider,
-                    available=list(available_providers),
-                )
-                return False
-
-            # Update config
-            config.setdefault("provider", {})["active"] = provider
-
-            # Write back to file
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(config, f, default_flow_style=False, indent=2)
 
-            # Invalidate cache
-            self._cached_config = None
-
             logger.info(
-                event="provider_updated", message="Active provider updated", new_provider=provider
+                event="config_saved",
+                message="Configuration saved to file",
+                path=str(self.config_path),
             )
 
             return True
 
         except Exception as e:
             logger.error(
-                event="provider_update_failed",
-                message="Failed to update active provider",
-                provider=provider,
-                error=str(e),
-            )
-            return False
-
-    async def update_parameter(
-        self, provider: str, model: str, param_name: str, value: Any
-    ) -> bool:
-        """
-        Update a specific parameter for a provider/model combination.
-        Used by MCP service for AI self-configuration.
-
-        Args:
-            provider: Provider name
-            model: Model name
-            param_name: Parameter to update (temperature, max_tokens, etc.)
-            value: New parameter value
-
-        Returns:
-            True if update successful, False otherwise
-        """
-        try:
-            config = self.load_runtime_config()
-
-            # Navigate to provider model config
-            provider_models = config.setdefault("provider", {}).setdefault("models", {})
-
-            if provider not in provider_models:
-                logger.error(
-                    event="invalid_provider_for_update",
-                    message="Provider not found in configuration",
-                    provider=provider,
-                    available=list(provider_models.keys()),
-                )
-                return False
-
-            model_config = provider_models[provider]
-
-            # Update the parameter
-            model_config[param_name] = value
-
-            # Write back to file
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                yaml.dump(config, f, default_flow_style=False, indent=2)
-
-            # Invalidate cache
-            self._cached_config = None
-
-            logger.info(
-                event="parameter_updated",
-                message="Parameter updated via MCP",
-                provider=provider,
-                model=model,
-                parameter=param_name,
-                value=value,
-            )
-
-            return True
-
-        except Exception as e:
-            logger.error(
-                event="parameter_update_failed",
-                message="Failed to update parameter",
-                provider=provider,
-                model=model,
-                parameter=param_name,
-                value=value,
-                error=str(e),
+                event="config_save_failed", message="Failed to save configuration", error=str(e)
             )
             return False
 
 
-# Global runtime config manager instance
-_runtime_config_manager = None
+# Global persistence instance
+_persistence = None
 
 
-def get_runtime_config_manager() -> RuntimeConfigManager:
-    """Get global runtime config manager instance."""
-    global _runtime_config_manager
-    if _runtime_config_manager is None:
-        _runtime_config_manager = RuntimeConfigManager()
-    return _runtime_config_manager
-
-
-def get_active_provider_config() -> Dict[str, Any]:
-    """Get configuration for the currently active provider."""
-    return get_runtime_config_manager().get_active_provider_config()
-
-
-def update_active_provider(provider: str) -> bool:
-    """Update the active provider at runtime."""
-    return get_runtime_config_manager().update_active_provider(provider)
-
-
-def is_strict_mode() -> bool:
-    """Check if strict mode is enabled."""
-    return get_runtime_config_manager().is_strict_mode()
+def get_runtime_config_persistence() -> RuntimeConfigPersistence:
+    """Get global runtime config persistence instance."""
+    global _persistence
+    if _persistence is None:
+        _persistence = RuntimeConfigPersistence()
+    return _persistence

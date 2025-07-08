@@ -20,7 +20,6 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from common.logging import get_logger
-from common.runtime_config import RuntimeConfigManager
 
 logger = get_logger(__name__)
 
@@ -97,25 +96,12 @@ class ToolRegistry:
     Provides vendor-agnostic tool registration, discovery, and execution.
     """
 
-    def __init__(self, runtime_config_manager: RuntimeConfigManager):
+    def __init__(self):
         """Initialize the tool registry."""
-        self.runtime_config_manager = runtime_config_manager
         self.tools: Dict[str, Tool] = {}
         self.handlers: Dict[str, ToolHandler] = {}
 
-        # Initialize built-in tools
-        self._register_builtin_tools()
-
         logger.info(event="tool_registry_initialized", builtin_tools=list(self.tools.keys()))
-
-    def _register_builtin_tools(self) -> None:
-        """Register built-in tools."""
-        # Import built-in tool handlers
-        from .tools.ai_config_tool import AIConfigurationTool
-
-        # Store tool for lazy registration
-        self._ai_config_tool = AIConfigurationTool(self.runtime_config_manager)
-        self._builtin_tools_registered = False
 
     async def register_tool(self, tool: Tool) -> None:
         """Register a tool definition."""
@@ -152,20 +138,12 @@ class ToolRegistry:
 
         return False
 
-    async def _ensure_builtin_tools_registered(self) -> None:
-        """Ensure built-in tools are registered (lazy initialization)."""
-        if not self._builtin_tools_registered:
-            await self.register_tool_handler(self._ai_config_tool)
-            self._builtin_tools_registered = True
-
     async def list_tools(self) -> List[Tool]:
         """List all registered tools."""
-        await self._ensure_builtin_tools_registered()
         return list(self.tools.values())
 
     async def get_tool(self, tool_name: str) -> Optional[Tool]:
         """Get a specific tool definition."""
-        await self._ensure_builtin_tools_registered()
         return self.tools.get(tool_name)
 
     async def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> ToolExecution:
@@ -182,9 +160,6 @@ class ToolRegistry:
         start_time = time.time()
 
         try:
-            # Ensure built-in tools are registered
-            await self._ensure_builtin_tools_registered()
-
             # Check if tool exists
             if tool_name not in self.tools:
                 return ToolExecution(

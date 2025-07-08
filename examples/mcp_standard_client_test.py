@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 class MCPStandardClient:
     """Standard MCP HTTP client for testing endpoints."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8000"):
+    def __init__(self, base_url: str = "http://127.0.0.1:8001"):
         """Initialize MCP client."""
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=30.0)
@@ -235,7 +235,7 @@ async def test_mcp_endpoints():
 
 if __name__ == "__main__":
     print("🚀 Starting Standard MCP Client Test...")
-    print("📋 Make sure the backend server is running on port 8000")
+    print("📋 Make sure the backend server is running on port 8001")
     print("   Start with: python src/main.py")
     print()
 

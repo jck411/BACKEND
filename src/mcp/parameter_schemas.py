@@ -299,6 +299,15 @@ class ModelParameterSchemas:
             ),
         }
 
+    @classmethod
+    def has_schema(cls, provider: str, model: str) -> bool:
+        """Check if a schema is available for the given provider and model."""
+        try:
+            schema = cls.get_model_schema(provider, model)
+            return len(schema) > 0
+        except Exception:
+            return False
+
 
 class PopularModels:
     """Most popular models for Phase 1 implementation."""

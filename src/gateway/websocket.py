@@ -22,7 +22,7 @@ from common.models import WebSocketMessage, WebSocketResponse
 from gateway.connection_manager import ConnectionManager
 from router.message_types import RequestType, RouterRequest
 from router.request_router import RequestRouter
-from mcp.mcp_server import get_mcp_server
+from mcp.mcp2025_server import get_mcp2025_server
 
 logger = get_logger(__name__)
 
@@ -36,10 +36,12 @@ class WebSocketGateway:
         self.connection_manager = ConnectionManager()
         # TODO: Add media handler when needed for binary/media processing
         # self.media_handler = MediaHandler(max_file_size=config.gateway.max_upload_size)
-        self.router = RequestRouter(config)
 
-        # Initialize MCP server
-        self.mcp_server = get_mcp_server()
+        # Initialize MCP 2025 server (single source of truth)
+        self.mcp_server = get_mcp2025_server()  # MCP 2025 JSON-RPC server
+
+        # Initialize router with MCP server dependency
+        self.router = RequestRouter(config, self.mcp_server)
 
         # Setup routes
         self._setup_routes()
@@ -50,22 +52,55 @@ class WebSocketGateway:
         @self.app.get("/health")
         async def health_check():
             """Health check endpoint."""
-            mcp_health = await self.mcp_server.health_check()
-            return JSONResponse(
-                {
-                    "status": "healthy",
+            try:
+                # Check MCP server health
+                mcp_health = await self.mcp_server.health_check()
+
+                # Get active configuration to ensure it's working
+                active_config = await self.mcp_server.get_active_provider_config()
+
+                # Check router health (which includes adapter health)
+                provider_health = await self.router.health_check_all_providers()
+
+                overall_status = "healthy" if mcp_health else "unhealthy"
+
+                health_data = {
+                    "status": overall_status,
                     "active_connections": self.connection_manager.get_connection_count(),
-                    "mcp_server": mcp_health,
+                    "mcp_server": {
+                        "healthy": mcp_health,
+                        "active_provider": active_config.get("provider") if active_config else None,
+                        "active_model": active_config.get("model") if active_config else None,
+                    },
+                    "providers": provider_health,
+                    "message": (
+                        "MCP server is the single source of truth for configuration"
+                        if mcp_health
+                        else "MCP server unhealthy - system cannot function"
+                    ),
                 }
-            )
+
+                status_code = 200 if overall_status == "healthy" else 503
+                return JSONResponse(health_data, status_code=status_code)
+
+            except Exception as e:
+                logger.error(event="health_check_failed", error=str(e))
+                return JSONResponse(
+                    {
+                        "status": "error",
+                        "error": str(e),
+                        "message": "Health check failed - system may be unavailable",
+                    },
+                    status_code=503,
+                )
 
         @self.app.websocket("/ws/chat")
         async def websocket_endpoint(websocket: WebSocket):
             """Main WebSocket endpoint."""
             await self._handle_websocket_connection(websocket)
 
-        # Include MCP server routes
-        self.app.include_router(self.mcp_server.get_router())
+        # Include MCP 2025 server (single source of truth)
+        self.app.include_router(self.mcp_server.get_router())  # JSON-RPC /mcp/* endpoints
 
     async def _handle_websocket_connection(self, websocket: WebSocket) -> None:
         """Handle a new WebSocket connection."""
@@ -184,9 +219,47 @@ class WebSocketGateway:
                 connection_id=connection_id,
             )
 
+            logger.info(
+                event="router_processing_start",
+                message="Starting router processing",
+                connection_id=connection_id,
+                request_id=message.request_id,
+                request_type=request_type.value,
+                payload_keys=list(message.payload.keys()) if message.payload else [],
+            )
+
             # Process request and stream responses
+            response_count = 0
             async for response in self.router.process_request(router_request):
-                await self.connection_manager.send_to_connection(connection_id, response)
+                response_count += 1
+
+                logger.info(
+                    event="router_response_received",
+                    message="Received response from router",
+                    connection_id=connection_id,
+                    request_id=message.request_id,
+                    response_number=response_count,
+                    response_status=response.status,
+                )
+
+                success = await self.connection_manager.send_to_connection(connection_id, response)
+
+                logger.info(
+                    event="router_response_forwarded",
+                    message="Forwarded router response to WebSocket",
+                    connection_id=connection_id,
+                    request_id=message.request_id,
+                    response_number=response_count,
+                    send_success=success,
+                )
+
+            logger.info(
+                event="router_processing_complete",
+                message="Router processing completed",
+                connection_id=connection_id,
+                request_id=message.request_id,
+                total_responses=response_count,
+            )
 
         except Exception as e:
             logger.error(

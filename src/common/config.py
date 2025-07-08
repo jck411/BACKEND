@@ -1,11 +1,10 @@
 """
 Configuration loader for the backend project.
 
-Loads settings from config.yaml and environment variables.
+Loads settings from config.yaml. Environment variables are used ONLY for secrets.
 Following PROJECT_RULES.md security rules - never log secrets.
 """
 
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -103,7 +102,10 @@ class Config(BaseModel):
 
 def load_config(config_path: Optional[Path] = None) -> Config:
     """
-    Load configuration from YAML file and environment variables.
+    Load configuration from YAML file.
+
+    Environment variables are used ONLY for secrets (API keys), not configuration.
+    All configuration options must be set in config.yaml or runtime_config.yaml.
 
     Args:
         config_path: Path to config.yaml file. Defaults to ./config.yaml
@@ -121,29 +123,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         with open(config_path, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f) or {}
 
-    # Override with environment variables
-    # Gateway config
-    if "GATEWAY_HOST" in os.environ:
-        config_data.setdefault("gateway", {})["host"] = os.environ["GATEWAY_HOST"]
-    if "GATEWAY_PORT" in os.environ:
-        config_data.setdefault("gateway", {})["port"] = int(os.environ["GATEWAY_PORT"])
-
-    # Router config
-    if "ROUTER_TIMEOUT" in os.environ:
-        config_data.setdefault("router", {})["request_timeout"] = int(os.environ["ROUTER_TIMEOUT"])
-
-    # Provider selection (temporary - will move to MCP)
-    if "ACTIVE_PROVIDER" in os.environ:
-        config_data.setdefault("providers", {})["active"] = os.environ["ACTIVE_PROVIDER"]
-
-    # MCP config
-    if "MCP_DATABASE_PATH" in os.environ:
-        config_data.setdefault("mcp", {})["database_path"] = os.environ["MCP_DATABASE_PATH"]
-    if "REDIS_URL" in os.environ:
-        config_data.setdefault("mcp", {})["redis_url"] = os.environ["REDIS_URL"]
-
-    # Logging
-    if "LOG_LEVEL" in os.environ:
-        config_data["log_level"] = os.environ["LOG_LEVEL"]
+    # Environment variables are ONLY for secrets/API keys, not configuration
+    # All configuration should be in config.yaml or runtime_config.yaml
 
     return Config(**config_data)
