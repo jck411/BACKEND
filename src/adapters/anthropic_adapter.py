@@ -23,6 +23,7 @@ except ImportError:
 from adapters.base import AdapterRequest, AdapterResponse, BaseAdapter
 from adapters.tool_translator import ToolTranslator
 from common.logging import TimedLogger, get_logger
+from common.models import CompletedToolCall
 
 if TYPE_CHECKING:
     from mcp.mcp2025_server import MCP2025Server
@@ -182,11 +183,11 @@ class AnthropicAdapter(BaseAdapter):
                                 hasattr(event.content_block, "type")
                                 and event.content_block.type == "tool_use"
                             ):
-                                tool_call = {
-                                    "id": event.content_block.id,
-                                    "name": event.content_block.name,
-                                    "arguments": event.content_block.input,
-                                }
+                                tool_call = CompletedToolCall(
+                                    id=event.content_block.id,
+                                    name=event.content_block.name,
+                                    arguments=str(event.content_block.input),
+                                )
                                 yield AdapterResponse(
                                     content=None,
                                     tool_calls=[tool_call],

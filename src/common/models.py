@@ -14,6 +14,19 @@ from typing import Any, Dict, Optional, Union
 from pydantic import BaseModel, Field
 
 
+class CompletedToolCall(BaseModel):
+    """
+    Represents a completed tool call from streaming LLM responses.
+
+    Used by stream_utils.merge_tool_chunks() to accumulate tool call
+    fragments across multiple streaming chunks.
+    """
+
+    id: str = Field(..., description="Tool call ID (e.g., 'call_123' or 'auto_0')")
+    name: str = Field(..., description="Tool/function name (e.g., 'get_weather')")
+    arguments: str = Field(..., description="Raw JSON string of function arguments")
+
+
 class ChunkType(str, Enum):
     """Type of data chunk being streamed."""
 

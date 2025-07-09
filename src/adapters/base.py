@@ -13,6 +13,8 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from common.models import CompletedToolCall
+
 if TYPE_CHECKING:
     from mcp.mcp2025_server import MCP2025Server
 
@@ -37,7 +39,7 @@ class AdapterResponse(BaseModel):
     finish_reason: Optional[str] = Field(default=None, description="Completion reason")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     # MCP integration: tool calls handled via MCP
-    tool_calls: List[Dict[str, Any]] = Field(default_factory=list, description="MCP tool calls")
+    tool_calls: List[CompletedToolCall] = Field(default_factory=list, description="MCP tool calls")
 
 
 class BaseAdapter(ABC):

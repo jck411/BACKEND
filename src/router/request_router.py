@@ -471,17 +471,15 @@ class RequestRouter:
                         message="Executing tool calls locally via MCP 2025 protocol",
                         request_id=request.request_id,
                         tool_count=len(adapter_response.tool_calls),
-                        tool_names=[
-                            tc.get("name", "unknown") for tc in adapter_response.tool_calls
-                        ],
+                        tool_names=[tc.name for tc in adapter_response.tool_calls],
                     )
 
                     # Execute each tool call through MCP 2025 server
                     tool_results = []
                     for tool_call in adapter_response.tool_calls:
-                        tool_name = tool_call.get("name")
-                        tool_arguments = tool_call.get("arguments", {})
-                        tool_id = tool_call.get("id", f"call_{len(adapter_response.tool_calls)}")
+                        tool_name = tool_call.name
+                        tool_arguments = tool_call.arguments
+                        tool_id = tool_call.id
 
                         logger.info(
                             event="executing_tool_via_mcp2025",
@@ -647,11 +645,11 @@ class RequestRouter:
                         formatted_tool_calls = []
                         for tool_call in adapter_response.tool_calls:
                             formatted_tool_call = {
-                                "id": tool_call["id"],
+                                "id": tool_call.id,
                                 "type": "function",
                                 "function": {
-                                    "name": tool_call["name"],
-                                    "arguments": tool_call["arguments"],
+                                    "name": tool_call.name,
+                                    "arguments": tool_call.arguments,
                                 },
                             }
                             formatted_tool_calls.append(formatted_tool_call)

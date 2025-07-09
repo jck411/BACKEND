@@ -20,6 +20,7 @@ from openai import AsyncOpenAI
 from adapters.base import AdapterRequest, AdapterResponse, BaseAdapter
 from adapters.tool_translator import ToolTranslator
 from common.logging import TimedLogger, get_logger
+from common.stream_utils import merge_tool_chunks, finalize_remaining_calls
 
 if TYPE_CHECKING:
     from mcp.mcp2025_server import MCP2025Server
@@ -162,7 +163,8 @@ class OpenRouterAdapter(BaseAdapter):
                 # Make streaming request (OpenAI-compatible)
                 stream = await self.client.chat.completions.create(**request_params)
 
-                # Process streaming response - IMMEDIATE forwarding, no delays
+                # Process streaming response using shared helper
+                scratch_calls = {}  # Scratch buffer for tool call fragments
                 async for chunk in stream:
                     if not chunk.choices:
                         continue
@@ -176,26 +178,32 @@ class OpenRouterAdapter(BaseAdapter):
                             content=delta.content, metadata={"type": "content_delta"}
                         )
 
-                    # Handle tool calls
+                    # Handle tool calls using shared helper
                     if delta.tool_calls:
-                        tool_calls = []
-                        for tool_call in delta.tool_calls:
-                            if tool_call.function:
-                                tool_calls.append(
-                                    {
-                                        "id": tool_call.id,
-                                        "name": tool_call.function.name,
-                                        "arguments": tool_call.function.arguments,
-                                    }
-                                )
+                        # Use shared helper to merge tool call fragments
+                        completed_calls = merge_tool_chunks(
+                            delta.tool_calls, scratch_calls, provider="openrouter"
+                        )
 
-                        if tool_calls:
+                        # Yield any completed tool calls immediately
+                        if completed_calls:
                             yield AdapterResponse(
-                                content=None, tool_calls=tool_calls, metadata={"type": "tool_calls"}
+                                content=None,
+                                tool_calls=completed_calls,
+                                metadata={"type": "tool_calls"},
                             )
 
-                    # Handle completion - NO content, only completion signal
+                    # Handle completion
                     if choice.finish_reason:
+                        # Finalize any remaining tool calls
+                        remaining_calls = finalize_remaining_calls(scratch_calls)
+                        if remaining_calls:
+                            yield AdapterResponse(
+                                content=None,
+                                tool_calls=remaining_calls,
+                                metadata={"type": "tool_calls"},
+                            )
+
                         yield AdapterResponse(
                             content=None,  # Never send content here - prevents duplication
                             finish_reason=choice.finish_reason,

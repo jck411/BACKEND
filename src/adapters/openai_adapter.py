@@ -1,5 +1,5 @@
 """
-OpenAI adapter for chat completions and image generation.
+OpenAI adapter for chat completions and function calling.
 
 Following PROJECT_RULES.md:
 - Async I/O for all operations
@@ -19,6 +19,7 @@ from openai import AsyncOpenAI
 from adapters.base import AdapterRequest, AdapterResponse, BaseAdapter
 from adapters.tool_translator import ToolTranslator
 from common.logging import TimedLogger, get_logger
+from common.stream_utils import merge_tool_chunks, finalize_remaining_calls
 
 if TYPE_CHECKING:
     from mcp.mcp2025_server import MCP2025Server
@@ -194,9 +195,9 @@ class OpenAIAdapter(BaseAdapter):
                 # Make streaming request
                 stream = await self.client.chat.completions.create(**request_params)
 
-                # Process streaming response - IMMEDIATE forwarding, no delays
+                # Process streaming response using shared helper
                 chunk_count = 0
-                accumulated_tool_calls = {}  # Track tool calls being built
+                scratch_calls = {}  # Scratch buffer for tool call fragments
                 async for chunk in stream:
                     chunk_count += 1
 
@@ -245,7 +246,7 @@ class OpenAIAdapter(BaseAdapter):
 
                         yield adapter_response
 
-                    # Handle tool calls - accumulate across chunks
+                    # Handle tool calls using shared helper
                     if delta.tool_calls:
                         logger.info(
                             event="openai_tool_calls_detected",
@@ -263,39 +264,27 @@ class OpenAIAdapter(BaseAdapter):
                             ],
                         )
 
-                        # Accumulate tool call data across chunks
-                        for tool_call in delta.tool_calls:
-                            if tool_call.function:
-                                tool_id = tool_call.id
+                        # Use shared helper to merge tool call fragments
+                        completed_calls = merge_tool_chunks(
+                            delta.tool_calls, scratch_calls, provider="openai"
+                        )
 
-                                if tool_id not in accumulated_tool_calls:
-                                    accumulated_tool_calls[tool_id] = {
-                                        "id": tool_id,
-                                        "name": tool_call.function.name,
-                                        "arguments": "",
-                                    }
+                        # Yield any completed tool calls immediately
+                        if completed_calls:
+                            logger.info(
+                                event="openai_yielding_completed_tool_calls",
+                                message="Yielding completed tool calls from OpenAI adapter",
+                                tool_count=len(completed_calls),
+                                tool_calls_data=[tc.model_dump() for tc in completed_calls],
+                            )
 
-                                # Accumulate arguments (they come in pieces)
-                                if tool_call.function.arguments:
-                                    accumulated_tool_calls[tool_id][
-                                        "arguments"
-                                    ] += tool_call.function.arguments
+                            yield AdapterResponse(
+                                content=None,
+                                tool_calls=completed_calls,
+                                metadata={"type": "tool_calls"},
+                            )
 
-                                logger.info(
-                                    event="openai_tool_call_accumulated",
-                                    message="Accumulated tool call data",
-                                    tool_call_id=tool_id,
-                                    tool_name=tool_call.function.name,
-                                    current_args_chunk=tool_call.function.arguments,
-                                    total_accumulated_args=accumulated_tool_calls[tool_id][
-                                        "arguments"
-                                    ],
-                                    accumulated_length=len(
-                                        accumulated_tool_calls[tool_id]["arguments"]
-                                    ),
-                                )
-
-                    # Handle completion - send accumulated tool calls if any
+                    # Handle completion
                     if choice.finish_reason:
                         logger.info(
                             event="openai_completion",
@@ -303,23 +292,22 @@ class OpenAIAdapter(BaseAdapter):
                             chunk_number=chunk_count,
                             finish_reason=choice.finish_reason,
                             total_chunks_processed=chunk_count,
-                            accumulated_tool_calls_count=len(accumulated_tool_calls),
+                            remaining_scratch_calls=len(scratch_calls),
                         )
 
-                        # Send completed tool calls if any were accumulated
-                        if accumulated_tool_calls:
-                            completed_tool_calls = list(accumulated_tool_calls.values())
-
+                        # Finalize any remaining tool calls
+                        remaining_calls = finalize_remaining_calls(scratch_calls)
+                        if remaining_calls:
                             logger.info(
-                                event="openai_yielding_completed_tool_calls",
-                                message="Yielding completed tool calls from OpenAI adapter",
-                                tool_count=len(completed_tool_calls),
-                                tool_calls_data=completed_tool_calls,
+                                event="openai_finalizing_remaining_calls",
+                                message="Finalizing remaining tool calls",
+                                tool_count=len(remaining_calls),
+                                tool_calls_data=[tc.model_dump() for tc in remaining_calls],
                             )
 
                             yield AdapterResponse(
                                 content=None,
-                                tool_calls=completed_tool_calls,
+                                tool_calls=remaining_calls,
                                 metadata={"type": "tool_calls"},
                             )
 
@@ -371,36 +359,6 @@ class OpenAIAdapter(BaseAdapter):
                     finish_reason="error",
                     metadata={"error": str(e), "error_type": "api_error"},
                 )
-
-    async def generate_image(self, prompt: str, **kwargs) -> str:
-        """Generate an image using DALL-E."""
-
-        with TimedLogger(
-            logger,
-            "openai_image_generation",
-            prompt_length=len(prompt),
-        ):
-            try:
-                response = await self.client.images.generate(
-                    model=kwargs.get("model", "dall-e-3"),
-                    prompt=prompt,
-                    size=kwargs.get("size", "1024x1024"),
-                    quality=kwargs.get("quality", "standard"),
-                    n=1,
-                )
-
-                if response.data and len(response.data) > 0 and response.data[0].url:
-                    return response.data[0].url
-                else:
-                    raise ValueError("No image URL returned from OpenAI")
-
-            except openai.APIError as e:
-                logger.error(
-                    event="openai_image_error",
-                    message="OpenAI image generation error",
-                    error=str(e),
-                )
-                raise
 
     async def health_check(self) -> bool:
         """Check OpenAI API health by making a minimal request."""

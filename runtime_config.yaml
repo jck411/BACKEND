@@ -4,9 +4,7 @@ provider:
     anthropic:
       max_tokens: 4096
       model: claude-3-5-sonnet-20241022
-      system_prompt: You are a helpful AI assistant with access to smart home devices.
-        When users ask to control devices, use the available functions to execute
-        their requests.
+      system_prompt: You are a helpful AI assistant.
       temperature: 0.7
     gemini:
       max_tokens: 4096
