@@ -1082,10 +1082,14 @@ class MCP2025Server:
             ResetConfigTool(self),
         ]
 
-        # Register each tool
+        # Register each tool synchronously by directly calling the registry methods
         for tool_handler in tools:
             tool_def = tool_handler.get_tool_definition()
-            asyncio.create_task(self.tool_registry.register_tool_handler(tool_handler))
+
+            # Register tool definition directly (synchronous)
+            self.tool_registry.tools[tool_def.name] = tool_def
+            self.tool_registry.handlers[tool_def.name] = tool_handler
+
             logger.info(
                 event="configuration_tool_registered",
                 tool_name=tool_def.name,

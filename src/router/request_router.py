@@ -188,69 +188,89 @@ class RequestRouter:
         Get tools from MCP service (canonical source).
         Router delegates tool management to MCP.
         """
+        if not self.mcp_server:
+            logger.warning(
+                event="mcp_tools_no_server",
+                message="No MCP server available for tool retrieval",
+            )
+            return []
+
         try:
             logger.info(
                 event="getting_mcp_tools",
-                message="Retrieving MCP tools from service",
+                message="Retrieving MCP tools from MCP server",
                 requested_tools=tool_names,
             )
 
-            # Get ai_configure tool (primary MCP tool)
-            tool_dict = {
-                "name": "ai_configure",
-                "description": "Configure AI model parameters using natural language commands. Supports creative/conservative adjustments, explicit parameter setting, and provider-aware constraints.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "request": {
-                            "type": "string",
-                            "description": "Natural language description of desired parameter changes. Examples: 'make responses more creative', 'set temperature to 0.8', 'reduce randomness and be more focused'",
-                        },
-                        "context": {
-                            "type": "object",
-                            "description": "Additional context for the configuration request",
-                        },
-                        "confidence_threshold": {
-                            "type": "number",
-                            "description": "Minimum confidence required to apply changes automatically (0.0-1.0)",
-                        },
-                    },
-                    "required": ["request"],
-                },
-            }
+            # Get tools from MCP server's tool registry
+            all_tools = await self.mcp_server.tool_registry.list_tools()
 
+            # Convert tools to MCP format (same as _handle_tools_list)
+            mcp_tools = []
+            for tool in all_tools:
+                mcp_tool = {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "inputSchema": self._convert_tool_parameters_to_schema(tool),
+                }
+                mcp_tools.append(mcp_tool)
+
+            # Filter to requested tools if specified
             if tool_names:
-                # Filter to requested tools
-                if "ai_configure" in tool_names:
-                    logger.info(
-                        event="mcp_tools_filtered",
-                        message="Returning filtered MCP tools",
-                        requested_tools=tool_names,
-                        returned_tools=["ai_configure"],
-                    )
-                    return [tool_dict]
-                else:
-                    logger.info(
-                        event="mcp_tools_filtered_empty",
-                        message="No matching MCP tools found",
-                        requested_tools=tool_names,
-                        available_tools=["ai_configure"],
-                    )
-                    return []
+                filtered_tools = [tool for tool in mcp_tools if tool["name"] in tool_names]
+                logger.info(
+                    event="mcp_tools_filtered",
+                    message="Returning filtered MCP tools",
+                    requested_tools=tool_names,
+                    returned_tools=[tool["name"] for tool in filtered_tools],
+                )
+                return filtered_tools
 
             logger.info(
                 event="mcp_tools_returned",
                 message="Returning all available MCP tools",
-                tools_count=1,
-                tools=["ai_configure"],
-                full_tool_definition=tool_dict,
+                tools_count=len(mcp_tools),
+                tools=[tool["name"] for tool in mcp_tools],
             )
 
-            return [tool_dict]
+            return mcp_tools
 
         except Exception as e:
             logger.error(event="mcp_tools_error", message="Failed to get MCP tools", error=str(e))
             return []
+
+    def _convert_tool_parameters_to_schema(self, tool) -> Dict[str, Any]:
+        """Convert tool parameters to JSON Schema format."""
+        if not tool.parameters:
+            return {"type": "object", "properties": {}, "required": []}
+
+        properties = {}
+        required = []
+
+        for param in tool.parameters:
+            # Convert parameter to JSON Schema
+            prop_schema: Dict[str, Any] = {
+                "type": param.type.value,
+                "description": param.description,
+            }
+
+            if param.enum:
+                prop_schema["enum"] = param.enum
+            if param.minimum is not None:
+                prop_schema["minimum"] = param.minimum
+            if param.maximum is not None:
+                prop_schema["maximum"] = param.maximum
+            if param.pattern:
+                prop_schema["pattern"] = param.pattern
+            if param.default is not None:
+                prop_schema["default"] = param.default
+
+            properties[param.name] = prop_schema
+
+            if param.required:
+                required.append(param.name)
+
+        return {"type": "object", "properties": properties, "required": required}
 
     async def health_check_all_providers(self) -> Dict[str, bool]:
         """Check health of all configured providers."""
