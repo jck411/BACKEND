@@ -23,4 +23,8 @@ mcp:
 logging:
   level: "INFO"                    # Log level - ✅ INTEGRATED
   enable_pretty_print: false      # Custom pretty print for debugging - ✅ INTEGRATED
-  enable_jq_json_formatting: true  # jq-style JSON formatting - ✅ INTEGRATED
+  enable_jq_json_formatting: false  # jq-style JSON formatting - ✅ INTEGRATED
+  save_to_file: true               # Save logs to file - ✅ READY TO USE
+  log_file_path: "server.log"     # Log file path (relative to root) - ✅ READY TO USE
+  max_log_file_size: 10485760     # Max log file size in bytes (10MB) - ✅ READY TO USE
+  backup_count: 5                 # Number of backup log files to keep - ✅ READY TO USE

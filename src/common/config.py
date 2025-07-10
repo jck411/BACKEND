@@ -104,6 +104,12 @@ class Config(BaseModel):
     enable_jq_json_formatting: bool = Field(
         default=False, description="Enable jq-style JSON formatting for logs"
     )
+    save_to_file: bool = Field(default=False, description="Save logs to file")
+    log_file_path: str = Field(default="server.log", description="Log file path (relative to root)")
+    max_log_file_size: int = Field(
+        default=10485760, description="Max log file size in bytes (10MB)"
+    )
+    backup_count: int = Field(default=5, description="Number of backup log files to keep")
 
 
 def load_config(config_path: Optional[Path] = None) -> Config:
@@ -138,6 +144,14 @@ def load_config(config_path: Optional[Path] = None) -> Config:
             config_data["enable_pretty_print"] = logging_config["enable_pretty_print"]
         if "enable_jq_json_formatting" in logging_config:
             config_data["enable_jq_json_formatting"] = logging_config["enable_jq_json_formatting"]
+        if "save_to_file" in logging_config:
+            config_data["save_to_file"] = logging_config["save_to_file"]
+        if "log_file_path" in logging_config:
+            config_data["log_file_path"] = logging_config["log_file_path"]
+        if "max_log_file_size" in logging_config:
+            config_data["max_log_file_size"] = logging_config["max_log_file_size"]
+        if "backup_count" in logging_config:
+            config_data["backup_count"] = logging_config["backup_count"]
 
     # Environment variables are ONLY for secrets/API keys, not configuration
     # All configuration should be in config.yaml or runtime_config.yaml

@@ -9,6 +9,7 @@ Following PROJECT_RULES.md:
 
 import json
 import logging
+import logging.handlers
 import subprocess
 import time
 from typing import Any, Optional
@@ -116,9 +117,29 @@ def setup_logging(config: Config) -> None:
         cache_logger_on_first_use=True,
     )
 
-    # Set log level
+    # Set up handlers
+    handlers = []
+
+    # Console handler (always present)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
+    handlers.append(console_handler)
+
+    # File handler (if enabled)
+    if config.save_to_file:
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=config.log_file_path,
+            maxBytes=config.max_log_file_size,
+            backupCount=config.backup_count,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter("%(message)s"))
+        handlers.append(file_handler)
+
+    # Set log level and handlers
     logging.basicConfig(
         level=getattr(logging, config.log_level.upper()),
+        handlers=handlers,
         format="%(message)s",
     )
 
