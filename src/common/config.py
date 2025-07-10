@@ -98,6 +98,9 @@ class Config(BaseModel):
     providers: ProviderConfig = Field(default_factory=ProviderConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     log_level: str = Field(default="INFO", description="Logging level")
+    enable_pretty_print: bool = Field(
+        default=False, description="Enable custom pretty print for debugging"
+    )
 
 
 def load_config(config_path: Optional[Path] = None) -> Config:
@@ -122,6 +125,14 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     if config_path.exists():
         with open(config_path, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f) or {}
+
+    # Handle nested logging configuration
+    if "logging" in config_data:
+        logging_config = config_data["logging"]
+        if "level" in logging_config:
+            config_data["log_level"] = logging_config["level"]
+        if "enable_pretty_print" in logging_config:
+            config_data["enable_pretty_print"] = logging_config["enable_pretty_print"]
 
     # Environment variables are ONLY for secrets/API keys, not configuration
     # All configuration should be in config.yaml or runtime_config.yaml

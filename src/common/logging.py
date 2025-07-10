@@ -15,6 +15,45 @@ import structlog
 
 from common.config import Config
 
+# Global config reference for pretty print setting
+_config: Optional[Config] = None
+
+
+def pretty_renderer(_, __, event_dict) -> str:
+    """
+    Custom renderer that formats logs with line breaks after commas
+    and removes timestamps, logger level, and logger names when pretty print is enabled.
+    """
+    global _config
+
+    # If pretty print is not enabled, fall back to JSON
+    if not _config or not _config.enable_pretty_print:
+        result = structlog.processors.JSONRenderer()(_, __, event_dict)
+        return str(result)
+
+    # Regular pretty printing
+    # Remove unwanted fields for pretty printing
+    filtered_dict = {
+        k: v for k, v in event_dict.items() if k not in ["timestamp", "level", "logger"]
+    }
+
+    # Format the event specially
+    event = filtered_dict.pop("event", "unknown_event")
+    output_lines = [f"EVENT: {event}"]
+
+    # Format each key-value pair
+    for key, value in filtered_dict.items():
+        if isinstance(value, (dict, list)):
+            # Convert to string and add line breaks after commas
+            value_str = str(value)
+            formatted_value = value_str.replace(", ", ",\n    ")
+            output_lines.append(f"{key}: {formatted_value}")
+        else:
+            output_lines.append(f"{key}: {value}")
+
+    output_lines.append("-" * 50)
+    return "\n".join(output_lines)
+
 
 def setup_logging(config: Config) -> None:
     """
@@ -23,6 +62,9 @@ def setup_logging(config: Config) -> None:
     Args:
         config: Application configuration
     """
+    global _config
+    _config = config
+
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -32,7 +74,7 @@ def setup_logging(config: Config) -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
-            structlog.processors.JSONRenderer(),
+            pretty_renderer,  # Use our custom renderer instead of JSONRenderer
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -88,3 +130,36 @@ class TimedLogger:
 def get_logger(name: str) -> structlog.BoundLogger:
     """Get a configured structlog logger."""
     return structlog.get_logger(name)
+
+
+def pretty_log(event: str, **kwargs: Any) -> None:
+    """
+    Simple pretty printer for debugging - bypasses structured logging entirely.
+    Only prints if enable_pretty_print is True in config.
+
+    Format:
+    - No timestamps, logger level, or logger names
+    - Line break after every comma in key-value pairs
+    - Clean, readable output for debugging
+
+    Args:
+        event: Event name
+        **kwargs: Key-value pairs to print
+    """
+    global _config
+
+    # Only print if pretty print is enabled in config
+    if not _config or not _config.enable_pretty_print:
+        return
+
+    print(f"EVENT: {event}")
+    for key, value in kwargs.items():
+        # Convert value to string and format with line breaks after commas
+        if isinstance(value, (dict, list)):
+            value_str = str(value)
+            # Add line breaks after commas
+            formatted_value = value_str.replace(", ", ",\n    ")
+            print(f"{key}: {formatted_value}")
+        else:
+            print(f"{key}: {value}")
+    print("-" * 50)

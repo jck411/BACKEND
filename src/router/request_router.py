@@ -265,6 +265,16 @@ class RequestRouter:
             if param.default is not None:
                 prop_schema["default"] = param.default
 
+            # Handle array items
+            if param.type.value == "array" and param.items:
+                prop_schema["items"] = {
+                    "type": param.items.type.value,
+                    "description": param.items.description,
+                }
+                # Add enum if the items have it
+                if param.items.enum:
+                    prop_schema["items"]["enum"] = param.items.enum
+
             properties[param.name] = prop_schema
 
             if param.required:

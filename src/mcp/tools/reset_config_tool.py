@@ -57,6 +57,11 @@ class ResetConfigTool(ToolHandler):
                     type=ToolParameterType.ARRAY,
                     description="Specific parameters to reset. If not provided, all parameters will be reset.",
                     required=False,
+                    items=ToolParameter(
+                        name="parameter",
+                        type=ToolParameterType.STRING,
+                        description="Parameter name to reset",
+                    ),
                 ),
             ],
             examples=[

@@ -523,6 +523,17 @@ class MCP2025Server:
             if param.default is not None:
                 prop_schema["default"] = param.default
 
+            # Handle array items
+            if param.type.value == "array" and param.items:
+                items_schema: Dict[str, Any] = {
+                    "type": param.items.type.value,
+                    "description": param.items.description,
+                }
+                # Add enum if the items have it
+                if param.items.enum:
+                    items_schema["enum"] = param.items.enum
+                prop_schema["items"] = items_schema
+
             properties[param.name] = prop_schema
 
             if param.required:
