@@ -101,6 +101,9 @@ class Config(BaseModel):
     enable_pretty_print: bool = Field(
         default=False, description="Enable custom pretty print for debugging"
     )
+    enable_jq_json_formatting: bool = Field(
+        default=False, description="Enable jq-style JSON formatting for logs"
+    )
 
 
 def load_config(config_path: Optional[Path] = None) -> Config:
@@ -133,6 +136,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
             config_data["log_level"] = logging_config["level"]
         if "enable_pretty_print" in logging_config:
             config_data["enable_pretty_print"] = logging_config["enable_pretty_print"]
+        if "enable_jq_json_formatting" in logging_config:
+            config_data["enable_jq_json_formatting"] = logging_config["enable_jq_json_formatting"]
 
     # Environment variables are ONLY for secrets/API keys, not configuration
     # All configuration should be in config.yaml or runtime_config.yaml

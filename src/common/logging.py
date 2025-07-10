@@ -7,7 +7,9 @@ Following PROJECT_RULES.md:
 - Never log tokens, secrets, or PII
 """
 
+import json
 import logging
+import subprocess
 import time
 from typing import Any, Optional
 
@@ -19,40 +21,72 @@ from common.config import Config
 _config: Optional[Config] = None
 
 
+def jq_format_json(json_str: str) -> str:
+    """
+    Format JSON string using jq-style pretty printing.
+    Falls back to regular JSON pretty printing if jq is not available.
+    """
+    try:
+        # Try to use jq for formatting if available
+        result = subprocess.run(
+            ["jq", "."], input=json_str, text=True, capture_output=True, timeout=1
+        )
+        if result.returncode == 0:
+            return result.stdout.rstrip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+    # Fallback to Python's json formatting
+    try:
+        parsed = json.loads(json_str)
+        return json.dumps(parsed, indent=2)
+    except json.JSONDecodeError:
+        return json_str
+
+
 def pretty_renderer(_, __, event_dict) -> str:
     """
-    Custom renderer that formats logs with line breaks after commas
-    and removes timestamps, logger level, and logger names when pretty print is enabled.
+    Custom renderer that formats logs based on configuration:
+    - enable_jq_json_formatting: Uses jq-style JSON formatting
+    - enable_pretty_print: Uses custom pretty format (removes timestamps, etc.)
+    - Neither: Uses compact JSON format
     """
     global _config
 
-    # If pretty print is not enabled, fall back to JSON
-    if not _config or not _config.enable_pretty_print:
-        result = structlog.processors.JSONRenderer()(_, __, event_dict)
-        return str(result)
+    # Generate JSON first
+    json_result = structlog.processors.JSONRenderer()(_, __, event_dict)
+    json_str = str(json_result)
 
-    # Regular pretty printing
-    # Remove unwanted fields for pretty printing
-    filtered_dict = {
-        k: v for k, v in event_dict.items() if k not in ["timestamp", "level", "logger"]
-    }
+    # If jq formatting is enabled, use that
+    if _config and _config.enable_jq_json_formatting:
+        return jq_format_json(json_str)
 
-    # Format the event specially
-    event = filtered_dict.pop("event", "unknown_event")
-    output_lines = [f"EVENT: {event}"]
+    # If pretty print is enabled, use custom formatting
+    if _config and _config.enable_pretty_print:
+        # Remove unwanted fields for pretty printing
+        filtered_dict = {
+            k: v for k, v in event_dict.items() if k not in ["timestamp", "level", "logger"]
+        }
 
-    # Format each key-value pair
-    for key, value in filtered_dict.items():
-        if isinstance(value, (dict, list)):
-            # Convert to string and add line breaks after commas
-            value_str = str(value)
-            formatted_value = value_str.replace(", ", ",\n    ")
-            output_lines.append(f"{key}: {formatted_value}")
-        else:
-            output_lines.append(f"{key}: {value}")
+        # Format the event specially
+        event = filtered_dict.pop("event", "unknown_event")
+        output_lines = [f"EVENT: {event}"]
 
-    output_lines.append("-" * 50)
-    return "\n".join(output_lines)
+        # Format each key-value pair
+        for key, value in filtered_dict.items():
+            if isinstance(value, (dict, list)):
+                # Convert to string and add line breaks after commas
+                value_str = str(value)
+                formatted_value = value_str.replace(", ", ",\n    ")
+                output_lines.append(f"{key}: {formatted_value}")
+            else:
+                output_lines.append(f"{key}: {value}")
+
+        output_lines.append("-" * 50)
+        return "\n".join(output_lines)
+
+    # Default: return compact JSON
+    return json_str
 
 
 def setup_logging(config: Config) -> None:

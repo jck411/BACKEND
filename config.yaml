@@ -21,5 +21,6 @@ mcp:
 
 # Logging configuration
 logging:
-  level: "INFO"                  # Log level - ✅ INTEGRATED
-  enable_pretty_print: true    # Pretty print logs for debugging - ✅ INTEGRATED
+  level: "INFO"                    # Log level - ✅ INTEGRATED
+  enable_pretty_print: false      # Custom pretty print for debugging - ✅ INTEGRATED
+  enable_jq_json_formatting: true  # jq-style JSON formatting - ✅ INTEGRATED
