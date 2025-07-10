@@ -20,6 +20,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from common.logging import get_logger
+from common.config import MCPConfig
 
 logger = get_logger(__name__)
 
@@ -96,12 +97,21 @@ class ToolRegistry:
     Provides vendor-agnostic tool registration, discovery, and execution.
     """
 
-    def __init__(self):
+    def __init__(self, mcp_config: Optional[MCPConfig] = None):
         """Initialize the tool registry."""
         self.tools: Dict[str, Tool] = {}
         self.handlers: Dict[str, ToolHandler] = {}
 
-        logger.info(event="tool_registry_initialized", builtin_tools=list(self.tools.keys()))
+        # Store validation setting from config
+        self.enable_parameter_validation = (
+            mcp_config.enable_tool_parameter_validation if mcp_config else True
+        )
+
+        logger.info(
+            event="tool_registry_initialized",
+            builtin_tools=list(self.tools.keys()),
+            parameter_validation_enabled=self.enable_parameter_validation,
+        )
 
     async def register_tool(self, tool: Tool) -> None:
         """Register a tool definition."""
@@ -176,12 +186,13 @@ class ToolRegistry:
             tool = self.tools[tool_name]
             handler = self.handlers[tool_name]
 
-            # Validate arguments
-            validation_error = self._validate_arguments(tool, arguments)
-            if validation_error:
-                return ToolExecution(
-                    success=False, error=f"Argument validation failed: {validation_error}"
-                )
+            # Validate arguments only if validation is enabled
+            if self.enable_parameter_validation:
+                validation_error = self._validate_arguments(tool, arguments)
+                if validation_error:
+                    return ToolExecution(
+                        success=False, error=f"Argument validation failed: {validation_error}"
+                    )
 
             # Execute tool
             result = await handler.execute(arguments)
@@ -328,3 +339,9 @@ class ToolRegistry:
                 results.append(tool)
 
         return results
+
+    async def get_validation_status(self) -> Dict[str, bool]:
+        """Get current validation settings."""
+        return {
+            "parameter_validation_enabled": self.enable_parameter_validation,
+        }

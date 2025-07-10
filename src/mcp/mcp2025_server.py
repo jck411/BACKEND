@@ -19,6 +19,7 @@ from datetime import datetime
 
 from common.logging import get_logger
 from common.runtime_config import get_runtime_config_persistence
+from common.config import load_config
 from .parameter_schemas import ModelParameterSchemas, PopularModels
 from .tool_registry import ToolRegistry, Tool
 from .jsonrpc import (
@@ -86,7 +87,10 @@ class MCP2025Server:
         """Initialize the MCP 2025 server."""
         self.config_persistence = get_runtime_config_persistence()
         self.config_cache = None  # Cache loaded configuration
-        self.tool_registry = ToolRegistry()
+
+        # Load main config for MCP settings
+        main_config = load_config()
+        self.tool_registry = ToolRegistry(mcp_config=main_config.mcp)
         self.state = MCPServerState()
 
         # Initialize router with both HTTP and WebSocket endpoints

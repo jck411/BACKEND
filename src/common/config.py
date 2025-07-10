@@ -88,6 +88,9 @@ class MCPConfig(BaseModel):
 
     database_path: str = Field(default="mcp.db", description="SQLite database path")
     redis_url: Optional[str] = Field(default=None, description="Redis URL for pub/sub")
+    enable_tool_parameter_validation: bool = Field(
+        default=True, description="Enable tool parameter validation and type checking"
+    )
 
 
 class Config(BaseModel):
@@ -110,6 +113,9 @@ class Config(BaseModel):
         default=10485760, description="Max log file size in bytes (10MB)"
     )
     backup_count: int = Field(default=5, description="Number of backup log files to keep")
+    log_tool_calls_only: bool = Field(
+        default=False, description="When true, ONLY log tool call JSON (suppresses all other logs)"
+    )
 
 
 def load_config(config_path: Optional[Path] = None) -> Config:
@@ -152,6 +158,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
             config_data["max_log_file_size"] = logging_config["max_log_file_size"]
         if "backup_count" in logging_config:
             config_data["backup_count"] = logging_config["backup_count"]
+        if "log_tool_calls_only" in logging_config:
+            config_data["log_tool_calls_only"] = logging_config["log_tool_calls_only"]
 
     # Environment variables are ONLY for secrets/API keys, not configuration
     # All configuration should be in config.yaml or runtime_config.yaml

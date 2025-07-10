@@ -100,6 +100,12 @@ def setup_logging(config: Config) -> None:
     global _config
     _config = config
 
+    # If tool_calls_only mode is enabled, set very high log level to suppress normal logs
+    if config.log_tool_calls_only:
+        log_level = logging.CRITICAL + 1  # Higher than CRITICAL to suppress everything
+    else:
+        log_level = getattr(logging, config.log_level.upper())
+
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -138,14 +144,19 @@ def setup_logging(config: Config) -> None:
 
     # Set log level and handlers
     logging.basicConfig(
-        level=getattr(logging, config.log_level.upper()),
+        level=log_level,
         handlers=handlers,
         format="%(message)s",
     )
 
-    # Set specific logger levels
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+    # Set specific logger levels - suppress if tool_calls_only mode
+    if config.log_tool_calls_only:
+        logging.getLogger("uvicorn.access").setLevel(logging.CRITICAL + 1)
+        logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL + 1)
+        logging.getLogger().setLevel(logging.CRITICAL + 1)
+    else:
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+        logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 
 
 class TimedLogger:
@@ -185,6 +196,68 @@ class TimedLogger:
 def get_logger(name: str) -> structlog.BoundLogger:
     """Get a configured structlog logger."""
     return structlog.get_logger(name)
+
+
+def log_tool_call_json(event: str, json_data: Any, direction: str = "unknown") -> None:
+    """
+    Log tool call JSON data when log_tool_calls_only is enabled.
+    This bypasses all normal logging and only prints tool call JSON.
+
+    Args:
+        event: Event name (e.g., "tool_request", "tool_response")
+        json_data: The JSON data to log
+        direction: Direction of communication ("outgoing", "incoming")
+    """
+    global _config
+
+    # Only log if tool calls only mode is enabled
+    if not _config or not _config.log_tool_calls_only:
+        return
+
+    # Create a simple, clean JSON log entry
+    log_entry = {
+        "tool_call_event": event,
+        "direction": direction,
+        "timestamp": time.time(),
+        "data": json_data,
+    }
+
+    # Print directly to console and file (bypass all other logging)
+    json_output = json.dumps(log_entry, indent=2)
+    print(json_output)
+
+    # Also write to file if file logging is enabled
+    if _config.save_to_file:
+        try:
+            with open(_config.log_file_path, "a", encoding="utf-8") as f:
+                f.write(json_output + "\n")
+        except Exception:
+            pass  # Fail silently for file logging
+
+
+def log_startup_message(message: str, **kwargs: Any) -> None:
+    """
+    Log critical startup messages even when log_tool_calls_only is enabled.
+    These are essential for knowing the application is running.
+    """
+    global _config
+
+    if _config and _config.log_tool_calls_only:
+        # In tool calls only mode, show minimal startup info
+        if any(
+            key in message.lower() for key in ["starting", "server", "health", "failed", "crashed"]
+        ):
+            print(f"🚀 {message}")
+            if kwargs:
+                for key, value in kwargs.items():
+                    print(f"   {key}: {value}")
+    # If not in tool calls only mode, normal logging will handle it
+
+
+def should_suppress_normal_logs() -> bool:
+    """Check if normal logs should be suppressed (tool calls only mode)."""
+    global _config
+    return bool(_config and _config.log_tool_calls_only)
 
 
 def pretty_log(event: str, **kwargs: Any) -> None:
