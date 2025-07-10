@@ -1,0 +1,25 @@
+# Static Configuration File - INTEGRATED OPTIONS ONLY
+# These settings require server restart to take effect
+# For dynamic AI model settings, use runtime_config.yaml
+
+# Gateway configuration (WebSocket server settings)
+gateway:
+  host: "127.0.0.1"              # Server bind address - ✅ INTEGRATED
+  port: 8000                     # Server port - ✅ INTEGRATED
+  connection_timeout: 300        # Connection timeout in seconds - ✅ INTEGRATED
+  max_upload_size: 52428800      # Maximum upload size in bytes - ✅ READY TO USE
+
+# Router configuration (request handling)
+router:
+  request_timeout: 60            # Request timeout in seconds - ✅ INTEGRATED
+  max_retries: 3                 # Maximum retry attempts - ✅ INTEGRATED
+
+# MCP service configuration
+mcp:
+  database_path: "mcp.db"        # SQLite database path - ✅ DEFINED
+  redis_url: null                # Redis URL for pub/sub - ✅ DEFINED
+
+# Logging configuration
+logging:
+  level: "INFO"                  # Log level - ✅ INTEGRATED
+  enable_pretty_print: true    # Pretty print logs for debugging - ✅ INTEGRATED
