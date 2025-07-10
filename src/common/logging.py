@@ -198,6 +198,32 @@ def get_logger(name: str) -> structlog.BoundLogger:
     return structlog.get_logger(name)
 
 
+def log_startup_message(message: str, **kwargs: Any) -> None:
+    """
+    Log critical startup messages even when log_tool_calls_only is enabled.
+    These are essential for knowing the application is running.
+    """
+    global _config
+
+    if _config and _config.log_tool_calls_only:
+        # In tool calls only mode, show startup info with clear prefix
+        print(f"🚀 STARTUP: {message}")
+        if kwargs:
+            for key, value in kwargs.items():
+                print(f"   {key}: {value}")
+        print("-" * 50)
+    else:
+        # Normal mode - use regular structured logging
+        logger = get_logger("startup")
+        logger.info(message, **kwargs)
+
+
+def should_suppress_normal_logs() -> bool:
+    """Check if normal logs should be suppressed (tool calls only mode)."""
+    global _config
+    return bool(_config and _config.log_tool_calls_only)
+
+
 def log_tool_call_json(event: str, json_data: Any, direction: str = "unknown") -> None:
     """
     Log tool call JSON data when log_tool_calls_only is enabled.
@@ -235,29 +261,10 @@ def log_tool_call_json(event: str, json_data: Any, direction: str = "unknown") -
             pass  # Fail silently for file logging
 
 
-def log_startup_message(message: str, **kwargs: Any) -> None:
-    """
-    Log critical startup messages even when log_tool_calls_only is enabled.
-    These are essential for knowing the application is running.
-    """
+def should_log_adapter_details() -> bool:
+    """Check if adapter details should be logged (opposite of tool calls only mode)."""
     global _config
-
-    if _config and _config.log_tool_calls_only:
-        # In tool calls only mode, show minimal startup info
-        if any(
-            key in message.lower() for key in ["starting", "server", "health", "failed", "crashed"]
-        ):
-            print(f"🚀 {message}")
-            if kwargs:
-                for key, value in kwargs.items():
-                    print(f"   {key}: {value}")
-    # If not in tool calls only mode, normal logging will handle it
-
-
-def should_suppress_normal_logs() -> bool:
-    """Check if normal logs should be suppressed (tool calls only mode)."""
-    global _config
-    return bool(_config and _config.log_tool_calls_only)
+    return not (_config and _config.log_tool_calls_only)
 
 
 def pretty_log(event: str, **kwargs: Any) -> None:

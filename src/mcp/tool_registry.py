@@ -19,7 +19,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from common.logging import get_logger
+from common.logging import get_logger, should_log_adapter_details, log_startup_message
 from common.config import MCPConfig
 
 logger = get_logger(__name__)
@@ -107,8 +107,8 @@ class ToolRegistry:
             mcp_config.enable_tool_parameter_validation if mcp_config else True
         )
 
-        logger.info(
-            event="tool_registry_initialized",
+        log_startup_message(
+            "Tool Registry Initialized",
             builtin_tools=list(self.tools.keys()),
             parameter_validation_enabled=self.enable_parameter_validation,
         )
@@ -117,12 +117,13 @@ class ToolRegistry:
         """Register a tool definition."""
         self.tools[tool.name] = tool
 
-        logger.info(
-            event="tool_registered",
-            tool_name=tool.name,
-            parameters_count=len(tool.parameters),
-            category=tool.category,
-        )
+        if should_log_adapter_details():
+            logger.info(
+                event="tool_registered",
+                tool_name=tool.name,
+                parameters_count=len(tool.parameters),
+                category=tool.category,
+            )
 
     async def register_tool_handler(self, handler: ToolHandler) -> None:
         """Register a tool with its handler."""
@@ -130,11 +131,12 @@ class ToolRegistry:
         await self.register_tool(tool)
         self.handlers[tool.name] = handler
 
-        logger.info(
-            event="tool_handler_registered",
-            tool_name=tool.name,
-            handler_type=type(handler).__name__,
-        )
+        if should_log_adapter_details():
+            logger.info(
+                event="tool_handler_registered",
+                tool_name=tool.name,
+                handler_type=type(handler).__name__,
+            )
 
     async def unregister_tool(self, tool_name: str) -> bool:
         """Unregister a tool."""
@@ -143,7 +145,8 @@ class ToolRegistry:
             if tool_name in self.handlers:
                 del self.handlers[tool_name]
 
-            logger.info(event="tool_unregistered", tool_name=tool_name)
+            if should_log_adapter_details():
+                logger.info(event="tool_unregistered", tool_name=tool_name)
             return True
 
         return False
@@ -199,12 +202,13 @@ class ToolRegistry:
 
             execution_time = (time.time() - start_time) * 1000  # Convert to ms
 
-            logger.info(
-                event="tool_executed",
-                tool_name=tool_name,
-                execution_time_ms=execution_time,
-                success=True,
-            )
+            if should_log_adapter_details():
+                logger.info(
+                    event="tool_executed",
+                    tool_name=tool_name,
+                    execution_time_ms=execution_time,
+                    success=True,
+                )
 
             return ToolExecution(success=True, result=result, execution_time_ms=execution_time)
 

@@ -20,7 +20,7 @@ from typing import AsyncGenerator, Dict, Any, Optional, TYPE_CHECKING
 from adapters.base import AdapterRequest, BaseAdapter
 from adapters.openai_adapter import OpenAIAdapter
 from common.config import Config
-from common.logging import TimedLogger, get_logger
+from common.logging import TimedLogger, get_logger, log_tool_call_json, should_log_adapter_details
 from common.models import Chunk, ChunkType, WebSocketResponse
 from router.message_types import RequestType, RouterRequest
 
@@ -453,16 +453,19 @@ class RequestRouter:
         try:
             async for adapter_response in active_adapter.chat_completion(adapter_request):  # type: ignore
                 # Log every adapter response for debugging
-                logger.info(
-                    event="adapter_response_received",
-                    message="Received response from adapter",
-                    request_id=request.request_id,
-                    has_content=bool(adapter_response.content),
-                    content_length=len(adapter_response.content) if adapter_response.content else 0,
-                    has_tool_calls=bool(adapter_response.tool_calls),
-                    has_finish_reason=bool(adapter_response.finish_reason),
-                    metadata=adapter_response.metadata,
-                )
+                if should_log_adapter_details():
+                    logger.info(
+                        event="adapter_response_received",
+                        message="Received response from adapter",
+                        request_id=request.request_id,
+                        has_content=bool(adapter_response.content),
+                        content_length=(
+                            len(adapter_response.content) if adapter_response.content else 0
+                        ),
+                        has_tool_calls=bool(adapter_response.tool_calls),
+                        has_finish_reason=bool(adapter_response.finish_reason),
+                        metadata=adapter_response.metadata,
+                    )
 
                 # Handle content streaming
                 if adapter_response.content:
@@ -480,29 +483,31 @@ class RequestRouter:
                         ),
                     )
 
-                    logger.info(
-                        event="websocket_response_yielding",
-                        message="Yielding content chunk to WebSocket",
-                        request_id=request.request_id,
-                        chunk_length=len(adapter_response.content),
-                        chunk_preview=(
-                            adapter_response.content[:50] + "..."
-                            if len(adapter_response.content) > 50
-                            else adapter_response.content
-                        ),
-                    )
+                    if should_log_adapter_details():
+                        logger.info(
+                            event="websocket_response_yielding",
+                            message="Yielding content chunk to WebSocket",
+                            request_id=request.request_id,
+                            chunk_length=len(adapter_response.content),
+                            chunk_preview=(
+                                adapter_response.content[:50] + "..."
+                                if len(adapter_response.content) > 50
+                                else adapter_response.content
+                            ),
+                        )
 
                     yield websocket_response
 
                 # Handle tool calls - EXECUTE LOCALLY VIA MCP 2025, DON'T SEND TO FRONTEND
                 if adapter_response.tool_calls:
-                    logger.info(
-                        event="tool_calls_received_for_mcp_execution",
-                        message="Executing tool calls locally via MCP 2025 protocol",
-                        request_id=request.request_id,
-                        tool_count=len(adapter_response.tool_calls),
-                        tool_names=[tc.name for tc in adapter_response.tool_calls],
-                    )
+                    if should_log_adapter_details():
+                        logger.info(
+                            event="tool_calls_received_for_mcp_execution",
+                            message="Executing tool calls locally via MCP 2025 protocol",
+                            request_id=request.request_id,
+                            tool_count=len(adapter_response.tool_calls),
+                            tool_names=[tc.name for tc in adapter_response.tool_calls],
+                        )
 
                     # Execute each tool call through MCP 2025 server
                     tool_results = []
@@ -511,13 +516,14 @@ class RequestRouter:
                         tool_arguments = tool_call.arguments
                         tool_id = tool_call.id
 
-                        logger.info(
-                            event="executing_tool_via_mcp2025",
-                            message="Executing tool call via MCP 2025 protocol",
-                            request_id=request.request_id,
-                            tool_name=tool_name,
-                            tool_id=tool_id,
-                        )
+                        if should_log_adapter_details():
+                            logger.info(
+                                event="executing_tool_via_mcp2025",
+                                message="Executing tool call via MCP 2025 protocol",
+                                request_id=request.request_id,
+                                tool_name=tool_name,
+                                tool_id=tool_id,
+                            )
 
                         try:
                             # Execute through MCP 2025 server for full compliance
@@ -544,8 +550,22 @@ class RequestRouter:
                                 ).model_dump(),
                             )
 
+                            # Log the JSON request being sent to tool registry
+                            log_tool_call_json(
+                                event="mcp_tool_request",
+                                json_data=mcp_request.model_dump(),
+                                direction="outgoing",
+                            )
+
                             # Execute through MCP 2025 server
                             mcp_response = await mcp_server._handle_request(mcp_request)
+
+                            # Log the JSON response received from tool registry
+                            log_tool_call_json(
+                                event="mcp_tool_response",
+                                json_data=mcp_response.model_dump() if mcp_response else None,
+                                direction="incoming",
+                            )
 
                             # Type-safe response handling
                             from mcp.jsonrpc import JSONRPCResponse, JSONRPCErrorResponse
@@ -699,13 +719,14 @@ class RequestRouter:
                         mcp_tools=None,  # Disable tools for follow-up to prevent infinite loops
                     )
 
-                    logger.info(
-                        event="continuing_conversation_with_mcp_results",
-                        message="Continuing conversation with LLM after MCP tool execution",
-                        request_id=request.request_id,
-                        tool_results_count=len(tool_results),
-                        successful_tools=sum(1 for r in tool_results if r["success"]),
-                    )
+                    if should_log_adapter_details():
+                        logger.info(
+                            event="continuing_conversation_with_mcp_results",
+                            message="Continuing conversation with LLM after MCP tool execution",
+                            request_id=request.request_id,
+                            tool_results_count=len(tool_results),
+                            successful_tools=sum(1 for r in tool_results if r["success"]),
+                        )
 
                     # Continue conversation with LLM to get explanation/summary
                     try:

@@ -18,7 +18,7 @@ from openai import AsyncOpenAI
 
 from adapters.base import AdapterRequest, AdapterResponse, BaseAdapter
 from adapters.tool_translator import ToolTranslator
-from common.logging import TimedLogger, get_logger
+from common.logging import TimedLogger, get_logger, should_log_adapter_details
 from common.stream_utils import merge_tool_chunks, finalize_remaining_calls
 
 if TYPE_CHECKING:
@@ -158,39 +158,42 @@ class OpenAIAdapter(BaseAdapter):
                     request_params["tools"] = openai_tools
                     request_params["tool_choice"] = "auto"
 
-                    logger.info(
-                        event="openai_tools_configured",
-                        message="Configured OpenAI tools from MCP",
-                        mcp_tools_count=len(request.mcp_tools),
-                        openai_tools_count=len(openai_tools),
-                        mcp_tool_names=[t.get("name") for t in request.mcp_tools],
-                        openai_tools_names=[
-                            t.get("function", {}).get("name") for t in openai_tools
-                        ],
-                        detailed_mcp_tools=request.mcp_tools,
-                        detailed_openai_tools=openai_tools,
-                    )
+                    if should_log_adapter_details():
+                        logger.info(
+                            event="openai_tools_configured",
+                            message="Configured OpenAI tools from MCP",
+                            mcp_tools_count=len(request.mcp_tools),
+                            openai_tools_count=len(openai_tools),
+                            mcp_tool_names=[t.get("name") for t in request.mcp_tools],
+                            openai_tools_names=[
+                                t.get("function", {}).get("name") for t in openai_tools
+                            ],
+                            detailed_mcp_tools=request.mcp_tools,
+                            detailed_openai_tools=openai_tools,
+                        )
                 else:
-                    logger.info(
-                        event="openai_no_tools",
-                        message="No MCP tools provided to OpenAI adapter",
-                        request_has_mcp_tools=bool(request.mcp_tools),
-                    )
+                    if should_log_adapter_details():
+                        logger.info(
+                            event="openai_no_tools",
+                            message="No MCP tools provided to OpenAI adapter",
+                            request_has_mcp_tools=bool(request.mcp_tools),
+                        )
 
                 # Log the complete request being sent to OpenAI
-                logger.info(
-                    event="openai_request_prepared",
-                    message="Prepared request for OpenAI API",
-                    model=request_params["model"],
-                    temperature=request_params["temperature"],
-                    messages_count=len(request_params["messages"]),
-                    has_tools=bool(request_params.get("tools")),
-                    tools_count=len(request_params.get("tools", [])),
-                    tool_choice=request_params.get("tool_choice"),
-                    max_tokens=request_params.get("max_tokens"),
-                    stream=request_params["stream"],
-                    full_request_params=request_params,  # Log full params for debugging
-                )
+                if should_log_adapter_details():
+                    logger.info(
+                        event="openai_request_prepared",
+                        message="Prepared request for OpenAI API",
+                        model=request_params["model"],
+                        temperature=request_params["temperature"],
+                        messages_count=len(request_params["messages"]),
+                        has_tools=bool(request_params.get("tools")),
+                        tools_count=len(request_params.get("tools", [])),
+                        tool_choice=request_params.get("tool_choice"),
+                        max_tokens=request_params.get("max_tokens"),
+                        stream=request_params["stream"],
+                        full_request_params=request_params,  # Log full params for debugging
+                    )
 
                 # Make streaming request
                 stream = await self.client.chat.completions.create(**request_params)
@@ -201,35 +204,38 @@ class OpenAIAdapter(BaseAdapter):
                 async for chunk in stream:
                     chunk_count += 1
 
-                    logger.info(
-                        event="openai_chunk_received",
-                        message="Received chunk from OpenAI",
-                        chunk_number=chunk_count,
-                        has_choices=bool(chunk.choices),
-                        choice_count=len(chunk.choices) if chunk.choices else 0,
-                    )
+                    if should_log_adapter_details():
+                        logger.info(
+                            event="openai_chunk_received",
+                            message="Received chunk from OpenAI",
+                            chunk_number=chunk_count,
+                            has_choices=bool(chunk.choices),
+                            choice_count=len(chunk.choices) if chunk.choices else 0,
+                        )
 
                     if not chunk.choices:
-                        logger.warning(
-                            event="openai_chunk_no_choices",
-                            message="OpenAI chunk has no choices",
-                            chunk_number=chunk_count,
-                        )
+                        if should_log_adapter_details():
+                            logger.warning(
+                                event="openai_chunk_no_choices",
+                                message="OpenAI chunk has no choices",
+                                chunk_number=chunk_count,
+                            )
                         continue
 
                     choice = chunk.choices[0]
                     delta = choice.delta
 
-                    logger.info(
-                        event="openai_delta_analysis",
-                        message="Analyzing OpenAI delta",
-                        chunk_number=chunk_count,
-                        has_content=bool(delta.content),
-                        content_length=len(delta.content) if delta.content else 0,
-                        content_preview=delta.content[:50] if delta.content else None,
-                        has_tool_calls=bool(delta.tool_calls),
-                        finish_reason=choice.finish_reason,
-                    )
+                    if should_log_adapter_details():
+                        logger.info(
+                            event="openai_delta_analysis",
+                            message="Analyzing OpenAI delta",
+                            chunk_number=chunk_count,
+                            has_content=bool(delta.content),
+                            content_length=len(delta.content) if delta.content else 0,
+                            content_preview=delta.content[:50] if delta.content else None,
+                            has_tool_calls=bool(delta.tool_calls),
+                            finish_reason=choice.finish_reason,
+                        )
 
                     # IMMEDIATE streaming - forward content chunks instantly
                     if delta.content:
@@ -237,32 +243,36 @@ class OpenAIAdapter(BaseAdapter):
                             content=delta.content, metadata={"type": "content_delta"}
                         )
 
-                        logger.info(
-                            event="openai_yielding_content",
-                            message="Yielding content from OpenAI adapter",
-                            chunk_number=chunk_count,
-                            content_length=len(delta.content),
-                        )
+                        if should_log_adapter_details():
+                            logger.info(
+                                event="openai_yielding_content",
+                                message="Yielding content from OpenAI adapter",
+                                chunk_number=chunk_count,
+                                content_length=len(delta.content),
+                            )
 
                         yield adapter_response
 
                     # Handle tool calls using shared helper
                     if delta.tool_calls:
-                        logger.info(
-                            event="openai_tool_calls_detected",
-                            message="OpenAI tool calls detected in delta",
-                            chunk_number=chunk_count,
-                            tool_calls_count=len(delta.tool_calls),
-                            raw_tool_calls=[
-                                {
-                                    "id": tc.id,
-                                    "type": tc.type if hasattr(tc, "type") else None,
-                                    "function_name": tc.function.name if tc.function else None,
-                                    "function_args": tc.function.arguments if tc.function else None,
-                                }
-                                for tc in delta.tool_calls
-                            ],
-                        )
+                        if should_log_adapter_details():
+                            logger.info(
+                                event="openai_tool_calls_detected",
+                                message="OpenAI tool calls detected in delta",
+                                chunk_number=chunk_count,
+                                tool_calls_count=len(delta.tool_calls),
+                                raw_tool_calls=[
+                                    {
+                                        "id": tc.id,
+                                        "type": tc.type if hasattr(tc, "type") else None,
+                                        "function_name": tc.function.name if tc.function else None,
+                                        "function_args": (
+                                            tc.function.arguments if tc.function else None
+                                        ),
+                                    }
+                                    for tc in delta.tool_calls
+                                ],
+                            )
 
                         # Use shared helper to merge tool call fragments
                         completed_calls = merge_tool_chunks(
@@ -271,12 +281,13 @@ class OpenAIAdapter(BaseAdapter):
 
                         # Yield any completed tool calls immediately
                         if completed_calls:
-                            logger.info(
-                                event="openai_yielding_completed_tool_calls",
-                                message="Yielding completed tool calls from OpenAI adapter",
-                                tool_count=len(completed_calls),
-                                tool_calls_data=[tc.model_dump() for tc in completed_calls],
-                            )
+                            if should_log_adapter_details():
+                                logger.info(
+                                    event="openai_yielding_completed_tool_calls",
+                                    message="Yielding completed tool calls from OpenAI adapter",
+                                    tool_count=len(completed_calls),
+                                    tool_calls_data=[tc.model_dump() for tc in completed_calls],
+                                )
 
                             yield AdapterResponse(
                                 content=None,
@@ -286,24 +297,26 @@ class OpenAIAdapter(BaseAdapter):
 
                     # Handle completion
                     if choice.finish_reason:
-                        logger.info(
-                            event="openai_completion",
-                            message="OpenAI completion received",
-                            chunk_number=chunk_count,
-                            finish_reason=choice.finish_reason,
-                            total_chunks_processed=chunk_count,
-                            remaining_scratch_calls=len(scratch_calls),
-                        )
+                        if should_log_adapter_details():
+                            logger.info(
+                                event="openai_completion",
+                                message="OpenAI completion received",
+                                chunk_number=chunk_count,
+                                finish_reason=choice.finish_reason,
+                                total_chunks_processed=chunk_count,
+                                remaining_scratch_calls=len(scratch_calls),
+                            )
 
                         # Finalize any remaining tool calls
                         remaining_calls = finalize_remaining_calls(scratch_calls)
                         if remaining_calls:
-                            logger.info(
-                                event="openai_finalizing_remaining_calls",
-                                message="Finalizing remaining tool calls",
-                                tool_count=len(remaining_calls),
-                                tool_calls_data=[tc.model_dump() for tc in remaining_calls],
-                            )
+                            if should_log_adapter_details():
+                                logger.info(
+                                    event="openai_finalizing_remaining_calls",
+                                    message="Finalizing remaining tool calls",
+                                    tool_count=len(remaining_calls),
+                                    tool_calls_data=[tc.model_dump() for tc in remaining_calls],
+                                )
 
                             yield AdapterResponse(
                                 content=None,
@@ -318,11 +331,12 @@ class OpenAIAdapter(BaseAdapter):
                         )
                         break
 
-                logger.info(
-                    event="openai_stream_complete",
-                    message="OpenAI streaming completed",
-                    total_chunks=chunk_count,
-                )
+                if should_log_adapter_details():
+                    logger.info(
+                        event="openai_stream_complete",
+                        message="OpenAI streaming completed",
+                        total_chunks=chunk_count,
+                    )
 
             except openai.APITimeoutError as e:
                 logger.error(

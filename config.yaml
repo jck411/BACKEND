@@ -29,4 +29,4 @@ logging:
   log_file_path: "server.log"     # Log file path (relative to root) - ✅ READY TO USE
   max_log_file_size: 10485760     # Max log file size in bytes (10MB) - ✅ READY TO USE
   backup_count: 5                 # Number of backup log files to keep - ✅ READY TO USE
-  log_tool_calls_only: true      # When true, ONLY log tool call JSON (suppresses all other logs) - ✅ READY TO USE
+  log_tool_calls_only: true       # When true, ONLY log tool call JSON (suppresses all other logs) - ✅ READY TO USE

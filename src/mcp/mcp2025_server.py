@@ -17,7 +17,12 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from datetime import datetime
 
-from common.logging import get_logger
+from common.logging import (
+    get_logger,
+    should_log_adapter_details,
+    log_startup_message,
+    log_tool_call_json,
+)
 from common.runtime_config import get_runtime_config_persistence
 from common.config import load_config
 from .parameter_schemas import ModelParameterSchemas, PopularModels
@@ -108,9 +113,8 @@ class MCP2025Server:
         # Register all configuration tools
         self._register_configuration_tools()
 
-        logger.info(
-            event="mcp2025_server_initialized",
-            message="MCP 2025 compliant server initialized",
+        log_startup_message(
+            "MCP 2025 Server Initialized",
             protocol_version=MCP_PROTOCOL_VERSION,
             capabilities=self.capabilities.model_dump(),
         )
@@ -363,13 +367,14 @@ class MCP2025Server:
 
             result = MCPToolsListResult(tools=paginated_tools, nextCursor=next_cursor)
 
-            logger.info(
-                event="tools_listed",
-                total_tools=len(all_tools),
-                returned_tools=len(paginated_tools),
-                cursor=params.cursor,
-                next_cursor=next_cursor,
-            )
+            if should_log_adapter_details():
+                logger.info(
+                    event="tools_listed",
+                    total_tools=len(all_tools),
+                    returned_tools=len(paginated_tools),
+                    cursor=params.cursor,
+                    next_cursor=next_cursor,
+                )
 
             return JSONRPCHandler.create_response(request.id, result.model_dump())
 
@@ -389,6 +394,13 @@ class MCP2025Server:
                 )
 
             params = MCPToolsCallParams.model_validate(request.params)
+
+            # Log the tool call request JSON
+            log_tool_call_json(
+                event="direct_mcp_tool_request",
+                json_data=request.model_dump(),
+                direction="incoming",
+            )
 
             # Execute tool through registry
             execution = await self.tool_registry.execute_tool(
@@ -461,14 +473,16 @@ class MCP2025Server:
                 if structured_content:
                     result_data["structuredContent"] = structured_content
 
-                result = MCPToolsCallResult.model_validate(result_data)
+                response = JSONRPCHandler.create_response(request.id, result_data)
 
-                logger.info(
-                    event="tool_executed",
-                    tool_name=params.name,
-                    execution_time_ms=execution.execution_time_ms,
-                    content_types=[c["type"] for c in content],
+                # Log the tool call response JSON
+                log_tool_call_json(
+                    event="direct_mcp_tool_response",
+                    json_data=response.model_dump(),
+                    direction="outgoing",
                 )
+
+                return response
 
             else:
                 # Tool execution failed
@@ -481,7 +495,7 @@ class MCP2025Server:
                     event="tool_execution_failed", tool_name=params.name, error=execution.error
                 )
 
-            return JSONRPCHandler.create_response(request.id, result.model_dump())
+                return JSONRPCHandler.create_response(request.id, result.model_dump())
 
         except Exception as e:
             logger.error(event="tool_call_error", error=str(e))

@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 # Local imports
 from common.config import load_config
-from common.logging import setup_logging, get_logger
+from common.logging import setup_logging, get_logger, log_startup_message
 from gateway.websocket import create_gateway_app
 from mcp.mcp2025_server import get_mcp2025_server
 
@@ -148,11 +148,12 @@ async def startup_health_checks(config) -> None:
 
 async def run_startup_checks(config) -> None:
     """Run async startup checks."""
-    logger.info(
-        event="application_starting",
+    log_startup_message(
+        "MCP 2025 Gateway Server Starting",
         version="MCP 2025 Gateway",
         host=config.gateway.host,
         port=config.gateway.port,
+        log_tool_calls_only=config.log_tool_calls_only,
     )
 
     # Perform startup health checks (fail-fast)
@@ -181,7 +182,12 @@ def main() -> None:
         host = args.host or config.gateway.host
         port = args.port or config.gateway.port
 
-        logger.info(event="starting_server", host=host, port=port)
+        log_startup_message(
+            "Server Ready - Starting HTTP/WebSocket Gateway",
+            host=host,
+            port=port,
+            log_tool_calls_only=config.log_tool_calls_only,
+        )
 
         # Run uvicorn synchronously (it creates its own event loop)
         uvicorn.run(
